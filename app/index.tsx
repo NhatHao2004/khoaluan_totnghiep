@@ -3,7 +3,8 @@ import { useLocation } from '@/hooks/use-location';
 import { useFavoriteTemples, useTemples } from '@/hooks/use-temples';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getNearbyTemples, Temple, toggleFavorite } from '@/services/firebase-service';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -13,36 +14,56 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 const categories = [
-  { id: 1, icon: require('@/assets/images/icon.png'), label: 'Chùa Khmer' },
-  { id: 2, icon: require('@/assets/images/icon.png'), label: 'Văn hóa' },
-  { id: 3, icon: require('@/assets/images/icon.png'), label: 'Ẩm thực' },
-  { id: 4, icon: require('@/assets/images/icon.png'), label: 'Điểm đến' },
-  { id: 5, icon: require('@/assets/images/icon.png'), label: 'Cộng đồng' },
-  { id: 6, icon: require('@/assets/images/icon.png'), label: 'Học tiếng Khmer' },
-  { id: 7, icon: require('@/assets/images/icon.png'), label: 'Thử thách' },
-  { id: 8, icon: require('@/assets/images/icon.png'), label: 'Trò chơi\ndân gian' },
+  { id: 1, icon: require('@/assets/images/pagoda.jpg'), label: 'Chùa Khmer' },
+  { id: 2, icon: require('@/assets/images/festival.jpg'), label: 'Văn hóa' },
+  { id: 3, icon: require('@/assets/images/amthuc.jpg'), label: 'Ẩm thực' },
+  { id: 4, icon: require('@/assets/images/tovisit.jpg'), label: 'Điểm đến' },
+  { id: 5, icon: require('@/assets/images/community.jpg'), label: 'Cộng đồng' },
+  { id: 6, icon: require('@/assets/images/hoctap.jpg'), label: 'Học tiếng Khmer' },
+  { id: 7, icon: require('@/assets/images/quiz.jpg'), label: 'Thử thách' },
+  { id: 8, icon: require('@/assets/images/games.jpg'), label: 'Trò chơi\ndân gian' },
 ];
+
+// Firebase Storage URLs
+const FIREBASE_IMAGES = {
+  defaultTemple: 'https://thamhiemmekong.com/wp-content/uploads/2020/03/chua-ang-1.jpg',
+  temple2: 'https://mia.vn/media/uploads/blog-du-lich/doi-net-1706424557.jpg',
+  // Hoặc thay bằng URL thực từ Firebase Storage của bạn
+};
+
+// Function để lấy ảnh theo temple ID
+const getTempleImage = (templeId: string, fallbackUrl?: string) => {
+  const imageMap: { [key: string]: string } = {
+    'temple1': FIREBASE_IMAGES.defaultTemple,
+    'temple2': FIREBASE_IMAGES.temple2,
+    // Thêm mapping cho các temple khác
+  };
+  
+  return imageMap[templeId] || fallbackUrl || FIREBASE_IMAGES.defaultTemple;
+};
 
 export default function HomeScreen() {
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
-  
+
   // Fetch data from Firebase
   const { temples, loading: templesLoading, error: templesError, refresh: refreshTemples } = useTemples();
   const { favorites, loading: favoritesLoading, error: favoritesError, refresh: refreshFavorites } = useFavoriteTemples();
-  
+
   // Get user location
-  const { location, loading: locationLoading, error: locationError } = useLocation();
-  
+  const { location, loading: locationLoading, error: locationError, refresh: refreshLocation } = useLocation();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [nearbyTemples, setNearbyTemples] = useState<(Temple & { distance: number })[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
-  
+  const [refreshing, setRefreshing] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
+
   // Animation for logo
   const [logoAnim] = useState(new Animated.Value(0));
 
@@ -71,9 +92,31 @@ export default function HomeScreen() {
     ).start();
   }, []);
 
+  // Auto refresh when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      // Luôn refresh khi quay về trang index
+      refreshTemples();
+      refreshFavorites();
+      if (location) {
+        loadNearbyTemples();
+      }
+      // Force re-render
+      setForceUpdate(prev => prev + 1);
+    }, [location])
+  );
+
+  // Listen to favorites changes
+  useEffect(() => {
+    // Force re-render when favorites data changes
+    if (favorites) {
+      console.log('Favorites updated:', favorites.length);
+    }
+  }, [favorites]);
+
   const loadNearbyTemples = async () => {
     if (!location) return;
-    
+
     try {
       setLoadingNearby(true);
       const nearby = await getNearbyTemples(
@@ -92,14 +135,35 @@ export default function HomeScreen() {
   const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
     try {
       await toggleFavorite(id, !currentStatus);
-      // Refresh both lists
-      refreshTemples();
-      refreshFavorites();
+      // Force refresh ngay lập tức
+      await refreshTemples();
+      await refreshFavorites();
       if (location) {
-        loadNearbyTemples();
+        await loadNearbyTemples();
       }
+      // Force re-render
+      setForceUpdate(prev => prev + 1);
     } catch (error) {
       console.error('Error toggling favorite:', error);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Refresh all data
+      refreshTemples();
+      refreshFavorites();
+      refreshLocation();
+      if (location) {
+        await loadNearbyTemples();
+      }
+      // Force re-render
+      setForceUpdate(prev => prev + 1);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -107,7 +171,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Header with background image */}
       <ImageBackground
-        source={require('@/assets/images/partial-react-logo.png')}
+        source={require('@/assets/images/backgroud.jpg')}
         style={styles.header}
         imageStyle={styles.headerImage}
       >
@@ -115,33 +179,10 @@ export default function HomeScreen() {
           <View style={styles.headerTop}>
             <View style={styles.greeting}>
               <ThemedText style={styles.appName}>KhmerGo</ThemedText>
-              <ThemedText style={styles.tagline}>Khám phá văn hóa Khmer</ThemedText>
+              <ThemedText style={styles.tagline}>Khám phá nền văn hóa Khmer</ThemedText>
             </View>
           </View>
-          
-          {/* Animated Logo */}
-          <Animated.Image
-            source={require('@/assets/images/icon.png')}
-            style={[
-              styles.headerLogo,
-              {
-                transform: [
-                  {
-                    translateX: logoAnim.interpolate({
-                      inputRange: [0, 0.5, 1],
-                      outputRange: [0, 250, 0],
-                    }),
-                  },
-                  {
-                    scaleX: logoAnim.interpolate({
-                      inputRange: [0, 0.45, 0.5, 0.95, 1],
-                      outputRange: [1, 1, -1, -1, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
+
           
           {/* Search Bar */}
           <View style={styles.searchContainer}>
@@ -149,8 +190,8 @@ export default function HomeScreen() {
               <ThemedText style={styles.searchIcon}>🔍</ThemedText>
               <TextInput
                 style={[styles.searchInput, { color: textColor }]}
-                placeholder="Tìm kiếm"
-                placeholderTextColor="#9e9e9e"
+                placeholder="Tìm kiếm..."
+                placeholderTextColor="#999999"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
@@ -179,7 +220,7 @@ export default function HomeScreen() {
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>Danh mục yêu thích</ThemedText>
           </View>
-          
+
           {favoritesLoading ? (
             <ActivityIndicator size="large" color={tintColor} style={styles.loader} />
           ) : favoritesError ? (
@@ -191,10 +232,10 @@ export default function HomeScreen() {
               Chưa có danh mục yêu thích
             </ThemedText>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll} key={forceUpdate}>
               {favorites.map((item) => (
                 <TouchableOpacity key={item.id} style={styles.featuredCard}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.cardFavorite}
                     onPress={() => handleToggleFavorite(item.id!, item.isFavorite || false)}
                   >
@@ -202,15 +243,14 @@ export default function HomeScreen() {
                       {item.isFavorite ? '❤️' : '🤍'}
                     </ThemedText>
                   </TouchableOpacity>
-                  <Image 
-                    source={require('@/assets/images/partial-react-logo.png')} 
+                  <Image
+                    source={{
+                      uri: item.imageUrl || getTempleImage(item.id || '', FIREBASE_IMAGES.defaultTemple)
+                    }}
                     style={styles.featuredCardImage}
                   />
                   <View style={styles.featuredCardContent}>
                     <ThemedText style={styles.featuredCardTitle}>{item.name}</ThemedText>
-                    <ThemedText style={styles.featuredCardSubtitle}>
-                      {item.rental || item.location || 'Chưa có địa chỉ'}
-                    </ThemedText>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -223,13 +263,21 @@ export default function HomeScreen() {
           <View style={styles.mapHeader}>
             <ThemedText style={styles.mapTitle}>Địa điểm gần bạn</ThemedText>
           </View>
-          
+
           {locationLoading || loadingNearby ? (
             <ActivityIndicator size="large" color={tintColor} style={styles.loader} />
           ) : locationError ? (
-            <ThemedText style={styles.errorText}>
-              {locationError}. Vui lòng bật GPS và cấp quyền truy cập vị trí.
-            </ThemedText>
+            <View style={styles.errorContainer}>
+              <ThemedText style={styles.errorText}>
+                {locationError}
+              </ThemedText>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={refreshLocation}
+              >
+                <ThemedText style={styles.retryButtonText}>Thử lại</ThemedText>
+              </TouchableOpacity>
+            </View>
           ) : nearbyTemples.length === 0 ? (
             <ThemedText style={styles.emptyText}>
               Không tìm thấy địa điểm nào gần bạn (trong bán kính 50km)
@@ -238,8 +286,10 @@ export default function HomeScreen() {
             <View style={styles.nearbyPlaces}>
               {nearbyTemples.map((item) => (
                 <TouchableOpacity key={item.id} style={styles.placeItem}>
-                  <Image 
-                    source={require('@/assets/images/partial-react-logo.png')} 
+                  <Image
+                    source={{
+                      uri: item.imageUrl || getTempleImage(item.id || '', FIREBASE_IMAGES.temple2)
+                    }}
                     style={styles.placeImage}
                   />
                   <View style={styles.placeInfo}>
@@ -278,7 +328,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     paddingTop: 50,
-    backgroundColor: 'rgba(232, 180, 184, 0.8)',
+    backgroundColor: 'rgba(196, 196, 196, 0.3)',
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,
   },
@@ -293,14 +343,20 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: '900',
     color: '#2C1810',
     marginBottom: 2,
+    textShadowColor: '#ffffff',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   tagline: {
     fontSize: 16,
-    fontWeight: '300',
+    fontWeight: '700',
     color: 'rgba(0, 0, 0, 0.9)',
+    textShadowColor: '#ffffff',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   headerLogo: {
     width: 55,
@@ -314,21 +370,28 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 12,
     paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   searchIcon: {
-    fontSize: 16,
+    fontSize: 18,
     marginRight: 12,
+    color: '#666666',
   },
   searchInput: {
     flex: 1,
     fontSize: 13,
-    color: '#2d2d2d',
+    color: '#333333',
+    fontWeight: '600',
   },
   content: {
     flex: 1,
@@ -339,7 +402,7 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 15,
     marginHorizontal: 10,
-    marginTop: 10,
+    marginTop: -20,
     marginBottom: 10,
     borderRadius: 20,
   },
@@ -376,7 +439,8 @@ const styles = StyleSheet.create({
   },
   featuredSection: {
     backgroundColor: '#ffffff',
-    paddingVertical: 15,
+    paddingVertical: 10,
+    marginTop: -20,
   },
   sectionHeader: {
     paddingHorizontal: 20,
@@ -442,6 +506,7 @@ const styles = StyleSheet.create({
   mapSection: {
     backgroundColor: '#ffffff',
     padding: 20,
+    paddingTop: 0,
     paddingBottom: 100,
   },
   mapHeader: {
@@ -505,6 +570,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 20,
     fontSize: 13,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  retryButton: {
+    backgroundColor: '#ff6b57',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyText: {
     opacity: 0.5,

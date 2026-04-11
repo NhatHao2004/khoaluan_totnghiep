@@ -1,12 +1,20 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
+import { HapticTab } from '@/components/haptic-tab';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
 
-export const unstable_settings = {
-  anchor: '(tabs)',
+// Prevent native splash screen from auto-hiding
+
+const COLORS = {
+  primary: '#2282ff',
+  inactive: '#9e9e9e',
+  background: '#ffffff',
+  shadow: '#0000ff',
 };
 
 export default function RootLayout() {
@@ -14,11 +22,99 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
+      <Tabs
+        initialRouteName="index"
+        screenOptions={{
+          tabBarActiveTintColor: COLORS.primary,
+          tabBarInactiveTintColor: COLORS.inactive,
+          headerShown: false,
+          tabBarButton: HapticTab,
+          tabBarStyle: {
+            height:70,
+            paddingBottom: 20,
+            paddingTop: 15,
+            backgroundColor: COLORS.background,
+            borderTopLeftRadius: 25,
+            borderTopRightRadius: 25,
+            borderTopWidth: 0,
+            shadowColor: COLORS.shadow,
+            shadowOffset: { width: 0, height: -5 },
+            shadowOpacity: 0.05,
+            shadowRadius: 20,
+            elevation: 10,
+            position: 'absolute',
+          },
+          tabBarShowLabel: false,
+        }}>
+        <Tabs.Screen
+          name="quiz"
+          options={{
+            title: 'Quiz',
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons 
+                name={focused ? 'help-circle' : 'help-circle-outline'} 
+                size={size || 24} 
+                color={color} 
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="explore"
+          options={{
+            title: 'Explore',
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons 
+                name={focused ? 'compass' : 'compass-outline'} 
+                size={size || 24} 
+                color={color} 
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ focused, size }) => (
+              <Ionicons 
+                name={focused ? 'grid' : 'grid-outline'} 
+                size={22} 
+                color={COLORS.primary} 
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="favorites"
+          options={{
+            title: 'Yêu thích',
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons 
+                name={focused ? 'heart' : 'heart-outline'} 
+                size={size || 24} 
+                color={color} 
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Cá nhân',
+            tabBarIcon: ({ color, focused, size }) => (
+              <Ionicons 
+                name={focused ? 'person' : 'person-outline'} 
+                size={23} 
+                color={color} 
+              />
+            ),
+          }}
+        />
+      </Tabs>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({});

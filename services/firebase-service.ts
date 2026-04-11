@@ -1,10 +1,7 @@
 import { db } from '@/config/firebase';
 import {
-    addDoc,
     collection,
-    deleteDoc,
     doc,
-    getDoc,
     getDocs,
     updateDoc
 } from 'firebase/firestore';
@@ -23,15 +20,8 @@ export interface Temple {
   isFavorite?: boolean;
 }
 
-export interface Category {
-  id?: string;
-  name: string;
-  icon: string;
-  description: string;
-}
-
 // Temples Collection
-export const templesCollection = 'temples';
+const templesCollection = 'temples';
 
 // Get all temples
 export const getTemples = async (): Promise<Temple[]> => {
@@ -43,22 +33,6 @@ export const getTemples = async (): Promise<Temple[]> => {
     } as Temple));
   } catch (error) {
     console.error('Error getting temples:', error);
-    throw error;
-  }
-};
-
-// Get temple by ID
-export const getTempleById = async (id: string): Promise<Temple | null> => {
-  try {
-    const docRef = doc(db, templesCollection, id);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as Temple;
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting temple:', error);
     throw error;
   }
 };
@@ -131,34 +105,13 @@ export const getNearbyTemples = async (
   }
 };
 
-// Add new temple
-export const addTemple = async (temple: Omit<Temple, 'id'>): Promise<string> => {
-  try {
-    const docRef = await addDoc(collection(db, templesCollection), temple);
-    return docRef.id;
-  } catch (error) {
-    console.error('Error adding temple:', error);
-    throw error;
-  }
-};
-
-// Update temple
-export const updateTemple = async (id: string, data: Partial<Temple>): Promise<void> => {
+// Update temple (internal use)
+const updateTemple = async (id: string, data: Partial<Temple>): Promise<void> => {
   try {
     const docRef = doc(db, templesCollection, id);
     await updateDoc(docRef, data);
   } catch (error) {
     console.error('Error updating temple:', error);
-    throw error;
-  }
-};
-
-// Delete temple
-export const deleteTemple = async (id: string): Promise<void> => {
-  try {
-    await deleteDoc(doc(db, templesCollection, id));
-  } catch (error) {
-    console.error('Error deleting temple:', error);
     throw error;
   }
 };
