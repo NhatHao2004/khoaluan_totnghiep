@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import { HapticTab } from '@/components/haptic-tab';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 // Prevent native splash screen from auto-hiding
 
@@ -21,7 +22,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <AuthProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Tabs
         initialRouteName="index"
         screenOptions={{
@@ -129,9 +131,40 @@ export default function RootLayout() {
             href: null, // Hide from tab bar
           }}
         />
+        <Tabs.Screen
+          name="login"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="register"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="edit-profile"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="change-password"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="language"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
       </Tabs>
       <StatusBar style="auto" />
     </ThemeProvider>
+    </AuthProvider>
   );
 }
 

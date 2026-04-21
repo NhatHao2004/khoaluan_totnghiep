@@ -8,7 +8,6 @@ import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Image,
-    RefreshControl,
     ScrollView,
     StyleSheet,
     TextInput,
@@ -54,7 +53,6 @@ export default function PagodaScreen() {
   const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
   const { temples, loading, error, refresh } = useTemples();
-  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchInput, setShowSearchInput] = useState(false);
 
@@ -103,23 +101,6 @@ export default function PagodaScreen() {
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    
-    // Hide search input and clear search query when refreshing
-    if (showSearchInput) {
-      setShowSearchInput(false);
-      setSearchQuery('');
-    }
-    
-    try {
-      await refresh();
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   // Filter only pagoda/temple category
   const pagodas = temples.filter(temple => 
@@ -197,13 +178,6 @@ export default function PagodaScreen() {
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={tintColor}
-          />
-        }
       >
         {/* Search Results Info */}
         {searchQuery.trim() && (

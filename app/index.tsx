@@ -60,9 +60,8 @@ export default function HomeScreen() {
   const { location, loading: locationLoading, error: locationError, refresh: refreshLocation } = useLocation();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [nearbyTemples, setNearbyTemples] = useState<(Temple & { distance: number })[]>([]);
+  const [nearbyTemples, setNearbyTemples] = useState<(Temple & { distance: number, isCalculatingDistance?: boolean })[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
 
   // Animation for logo
@@ -119,9 +118,12 @@ export default function HomeScreen() {
         50 // 50km radius
       );
 
-      // Cập nhật khoảng cách đường đi thực tế từ OSRM API
+      // Lọc ra 5 chùa gần nhất theo đường chim bay trước để giảm số lượng request
+      const top5Nearby = nearby.slice(0, 5);
+
+      // Chờ (await) tính toán đầy đủ khoảng cách thực tế từ OSRM API cho 5 chùa này
       const templesWithRealDistance = await Promise.all(
-        nearby.map(async (temple) => {
+        top5Nearby.map(async (temple) => {
           try {
             const url = `https://router.project-osrm.org/route/v1/car/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=false`;
             const response = await fetch(url);
@@ -133,15 +135,16 @@ export default function HomeScreen() {
             }
             return temple; // Fallback to straight line distance
           } catch (error) {
-            console.error('Error fetching route for temple:', temple.name, error);
             return temple; // Fallback to straight line distance
           }
         })
       );
 
-      // Sắp xếp lại theo khoảng cách thực tế và lấy 5 gần nhất
+      // Sắp xếp lại danh sách theo khoảng cách thực tế vừa lấy
       templesWithRealDistance.sort((a, b) => a.distance - b.distance);
-      setNearbyTemples(templesWithRealDistance.slice(0, 5)); // Show top 5 nearest
+      
+      // Xong xuôi tất cả mới cập nhật giao diện và tắt Loading
+      setNearbyTemples(templesWithRealDistance);
     } catch (error) {
       console.error('Error loading nearby temples:', error);
     } finally {
@@ -171,21 +174,12 @@ export default function HomeScreen() {
   };
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      // Refresh all data
-      refreshTemples();
-      refreshLocation();
-      if (location) {
-        await loadNearbyTemples();
-      }
-      // Force re-render
-      setForceUpdate(prev => prev + 1);
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    } finally {
-      setRefreshing(false);
+    // Chỉ cần load lại địa điểm gần bạn, không cần hiện vòng tròn xoay ở trên
+    if (location) {
+      loadNearbyTemples(); // Gọi ngầm, không await để không chờ
     }
+    // Force re-render để cập nhật UI
+    setForceUpdate(prev => prev + 1);
   };
 
   return (
@@ -277,7 +271,7 @@ export default function HomeScreen() {
                   <View style={styles.placeInfo}>
                     <ThemedText style={styles.placeTitle}>{item.name}</ThemedText>
                     <ThemedText style={styles.placeDistance}>
-                      📍 {item.distance.toFixed(1)} km
+                      {item.isCalculatingDistance ? '📍 Đang tính khoảng cách...' : `📍 ${item.distance.toFixed(1)} km`}
                     </ThemedText>
                   </View>
                   <TouchableOpacity

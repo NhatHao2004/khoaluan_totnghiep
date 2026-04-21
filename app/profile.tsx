@@ -1,11 +1,16 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/contexts/AuthContext';
 import { useUserScore } from '@/hooks/use-quiz';
 import { useFavoriteTemples } from '@/hooks/use-temples';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,15 +20,25 @@ import {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { favorites, loading, refresh } = useFavoriteTemples(); // Lấy cả refresh function
-  
-  // Temporary user ID - in production, get from auth
-  const TEMP_USER_ID = 'user_demo_001';
-  const { progress, loading: progressLoading, refresh: refreshProgress } = useUserScore(TEMP_USER_ID);
+  const { user, userData, loading: authLoading, logout, updateAvatar } = useAuth();
+  const { favorites, loading, refresh } = useFavoriteTemples();
 
-  // Timeout để tránh loading vô hạn
+  const [uploading, setUploading] = useState(false);
+
+  // Temporary user ID - in production, get from auth
+  const userId = user?.uid || 'user_demo_001';
+  const { progress, loading: progressLoading, refresh: refreshProgress } = useUserScore(userId);
+
+  const scrollRef = useRef<ScrollView>(null);
   const [showFallback, setShowFallback] = useState(false);
-  
+
+  // Cuộn lên đầu trang khi trạng thái đăng nhập thay đổi (đăng nhập hoặc đăng xuất thành công)
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ y: 0, animated: true });
+    }
+  }, [user]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (loading || progressLoading) {
@@ -31,7 +46,7 @@ export default function ProfileScreen() {
         console.log('⏰ Showing fallback data due to timeout');
       }
     }, 5000); // 5 giây timeout
-    
+
     return () => clearTimeout(timer);
   }, [loading, progressLoading]);
 
@@ -57,30 +72,87 @@ export default function ProfileScreen() {
           refreshProgress();
         }
       }, 100); // Delay nhỏ để tránh conflict
-      
+
       return () => clearTimeout(timer);
     }, []) // Không depend vào refresh functions để tránh vòng lặp
   );
 
   const handleMenuPress = (item: string) => {
-    console.log('Menu pressed:', item);
-    // TODO: Navigate to respective screens
+    if (!user && item !== 'about') {
+      Alert.alert('Thông báo', 'Đăng nhập để sử dụng tính năng này.');
+      return;
+    }
+
     switch (item) {
-      case 'settings':
-        // router.push('/settings');
+      case 'edit-profile':
+        router.push('/edit-profile');
+        break;
+      case 'change-password':
+        router.push('/change-password');
+        break;
+      case 'language':
+        router.push('/language');
         break;
       case 'saved':
-        // router.push('/saved-locations');
+        router.push('/favorites');
         break;
       case 'notifications':
-        // router.push('/notifications');
+        Alert.alert('Thông báo', 'Bạn hiện chưa có thông báo nào.');
         break;
       case 'about':
-        // router.push('/about');
+        Alert.alert('Về ứng dụng', 'KhmerGo version 1.0.0\nKhám phá văn hóa Khmer tại Việt Nam.');
         break;
       case 'logout':
-        // Handle logout
+        if (!user) {
+          Alert.alert('Thông báo', 'Bạn chưa đăng nhập.');
+          return;
+        }
+        Alert.alert(
+          'Đăng xuất',
+          'Bạn có muốn đăng xuất không.',
+          [
+            { text: 'Hủy', style: 'cancel' },
+            {
+              text: 'Đăng xuất',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await logout();
+                  Alert.alert('Thành công', 'Đã đăng xuất khỏi tài khoản của bạn.');
+                } catch (error) {
+                  Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
+                }
+              }
+            }
+          ]
+        );
         break;
+    }
+  };
+
+  const handlePickImage = async () => {
+    if (!user) {
+      Alert.alert('Thông báo', 'Vui lòng đăng nhập để thay đổi ảnh đại diện.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false, // Tắt chế độ cắt ảnh như yêu cầu
+      quality: 0.2,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      try {
+        setUploading(true);
+        await updateAvatar(result.assets[0].base64);
+        // Alert.alert('Thành công', 'Đã cập nhật ảnh đại diện.'); 
+      } catch (error) {
+        Alert.alert('Lỗi', 'Không thể cập nhật ảnh đại diện.');
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
@@ -88,29 +160,73 @@ export default function ProfileScreen() {
     <ThemedView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>Hồ sơ</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>Thông tin cá nhân và cài đặt</ThemedText>
+        <View style={styles.headerTextContainer}>
+          <ThemedText style={styles.headerTitle}>Hồ sơ</ThemedText>
+          <ThemedText style={styles.headerSubtitle}>Thông tin cá nhân và cài đặt</ThemedText>
+        </View>
+
+        {!user && !authLoading && (
+          <TouchableOpacity
+            style={styles.headerLoginBtn}
+            onPress={() => router.push('/login')}
+          >
+            <ThemedText style={styles.headerLoginBtnText}>Đăng nhập</ThemedText>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <ScrollView 
+      <ScrollView
+        ref={scrollRef}
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <ThemedText style={styles.avatarPlaceholder}>👤</ThemedText>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={handlePickImage}
+            disabled={uploading || !user}
+            activeOpacity={user ? 0.8 : 1}
+          >
+            <View style={[
+              styles.avatar,
+              uploading && styles.avatarUploading,
+              !user && styles.avatarGuest
+            ]}>
+              {uploading ? (
+                <ActivityIndicator color="white" />
+              ) : (userData?.photoURL || user?.photoURL) ? (
+                <Image
+                  source={{ uri: userData?.photoURL || user?.photoURL }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Ionicons
+                  name="person"
+                  size={50}
+                  color="white"
+                  style={{ marginTop: 10 }}
+                />
+              )}
             </View>
-            <View style={styles.statusDot} />
-          </View>
-          
+            {user && (
+              <>
+                <View style={styles.editBadge}>
+                  <Ionicons name="camera" size={14} color="white" />
+                </View>
+                <View style={styles.statusDot} />
+              </>
+            )}
+          </TouchableOpacity>
+
           <View style={styles.profileInfo}>
             <ThemedText style={styles.name} numberOfLines={2}>
-              Nguyễn Văn A
+              {user ? (userData?.fullName || user.displayName || 'Người dùng') : 'Khách'}
             </ThemedText>
-            <ThemedText style={styles.email}>nguyenvana@gmail.com</ThemedText>
+            <ThemedText style={styles.email}>
+              {user ? user.email : 'Đăng nhập để trải nghiệm tối ưu hơn'}
+            </ThemedText>
             <View style={styles.statsContainer}>
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
@@ -132,54 +248,55 @@ export default function ProfileScreen() {
         {/* Menu Sections */}
         <View style={styles.menuSection}>
           <ThemedText style={styles.sectionTitle}>Cài đặt tài khoản</ThemedText>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => handleMenuPress('settings')}
+            onPress={() => handleMenuPress('edit-profile')}
           >
             <View style={[styles.menuIcon, { backgroundColor: '#667eea' }]}>
-              <Ionicons name="settings-outline" size={20} color="white" />
+              <Ionicons name="person-outline" size={20} color="white" />
             </View>
             <View style={styles.menuContent}>
-              <ThemedText style={styles.menuText}>Cài đặt</ThemedText>
-              <ThemedText style={styles.menuSubtext}>Tùy chỉnh ứng dụng</ThemedText>
+              <ThemedText style={styles.menuText}>Đổi tên người dùng</ThemedText>
+              <ThemedText style={styles.menuSubtext}>Chỉnh sửa tên hiển thị trong ứng dụng</ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => handleMenuPress('saved')}
+            onPress={() => handleMenuPress('change-password')}
           >
-            <View style={[styles.menuIcon, { backgroundColor: '#ff6b57' }]}>
-              <Ionicons name="bookmark-outline" size={20} color="white" />
+            <View style={[styles.menuIcon, { backgroundColor: '#ff9800' }]}>
+              <Ionicons name="lock-closed-outline" size={20} color="white" />
             </View>
             <View style={styles.menuContent}>
-              <ThemedText style={styles.menuText}>Địa điểm đã lưu</ThemedText>
-              <ThemedText style={styles.menuSubtext}>Quản lý danh sách yêu thích</ThemedText>
+              <ThemedText style={styles.menuText}>Đổi mật khẩu</ThemedText>
+              <ThemedText style={styles.menuSubtext}>Cập nhật mật khẩu để tăng bảo mật</ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => handleMenuPress('notifications')}
+            onPress={() => handleMenuPress('language')}
           >
-            <View style={[styles.menuIcon, { backgroundColor: '#4caf50' }]}>
-              <Ionicons name="notifications-outline" size={20} color="white" />
+            <View style={[styles.menuIcon, { backgroundColor: '#9c27b0' }]}>
+              <Ionicons name="language-outline" size={20} color="white" />
             </View>
             <View style={styles.menuContent}>
-              <ThemedText style={styles.menuText}>Thông báo</ThemedText>
-              <ThemedText style={styles.menuSubtext}>Cài đặt thông báo</ThemedText>
+              <ThemedText style={styles.menuText}>Ngôn ngữ ứng dụng</ThemedText>
+              <ThemedText style={styles.menuSubtext}>Đổi ngôn ngữ hiển thị (Việt / Khmer)</ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
+
         </View>
 
         <View style={styles.menuSection}>
           <ThemedText style={styles.sectionTitle}>Hỗ trợ</ThemedText>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.menuItem}
             onPress={() => handleMenuPress('about')}
           >
@@ -193,7 +310,7 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.menuItem, styles.logoutItem]}
             onPress={() => handleMenuPress('logout')}
           >
@@ -217,13 +334,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  
+
   // Header Styles (giống explore.tsx)
   header: {
     backgroundColor: '#ffffff',
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -234,7 +354,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: '#2d2d2d',
-    marginBottom: 5,
     lineHeight: 36,
     includeFontPadding: true,
   },
@@ -242,6 +361,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666666',
   },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerLoginBtn: {
+    backgroundColor: '#ff9800',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: '#ff9800',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  headerLoginBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
 
   // Content Styles
   content: {
@@ -273,17 +412,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  avatarGuest: {
+    backgroundColor: '#3498db', // Màu xanh giống hình mẫu
+  },
+  avatarUploading: {
+    opacity: 0.7,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
+  },
   avatarPlaceholder: {
     fontSize: 48,
     color: 'white',
   },
+  editBadge: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    backgroundColor: '#ff9800',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    zIndex: 10,
+  },
   statusDot: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: 5,
+    right: 5,
+    width: 16,
     backgroundColor: '#4caf50',
     borderWidth: 3,
     borderColor: 'white',
@@ -308,7 +470,21 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 16,
     color: '#718096',
+    marginBottom: 12,
+  },
+  guestLoginBtn: {
+    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3498db',
     marginBottom: 20,
+  },
+  guestLoginBtnText: {
+    color: '#3498db',
+    fontSize: 14,
+    fontWeight: '700',
   },
   statsContainer: {
     flexDirection: 'row',
