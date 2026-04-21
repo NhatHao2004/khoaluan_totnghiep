@@ -1,5 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/contexts/AuthContext';
 import { useFavoriteTemples } from '@/hooks/use-temples';
 import { toggleFavorite } from '@/services/firebase-service';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +9,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Platform,
   RefreshControl,
@@ -19,18 +21,19 @@ import {
 
 export default function FavoritesScreen() {
   const router = useRouter();
-  const { favorites, loading, error, refresh } = useFavoriteTemples();
+  const { user } = useAuth();
+  const { favorites, loading, error, refresh } = useFavoriteTemples(user?.uid);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchInput, setShowSearchInput] = useState(false);
-  
+
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
-  
+
   // Đơn giản hóa logic - không dùng timeout phức tạp
   const [showMockData, setShowMockData] = useState(false);
-  
+
   // Sau 4 giây nếu vẫn loading thì hiển thị mock data
   useEffect(() => {
     if (loading) {
@@ -40,7 +43,7 @@ export default function FavoritesScreen() {
           console.log('⏰ Showing mock data due to timeout');
         }
       }, 4000);
-      
+
       return () => clearTimeout(timer);
     } else {
       setShowMockData(false);
@@ -64,16 +67,16 @@ export default function FavoritesScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    
+
     // Hide search input and clear search query when refreshing
     if (showSearchInput) {
       setShowSearchInput(false);
       setSearchQuery('');
     }
-    
+
     // Reset mock data
     setShowMockData(false);
-    
+
     try {
       await refresh();
     } catch (error) {
@@ -84,6 +87,15 @@ export default function FavoritesScreen() {
   };
 
   const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
+    if (!user) {
+      Alert.alert(
+        'Thông báo',
+        'Đăng nhập để thực hiện thao tác này.',
+        [{ text: 'Đăng nhập', onPress: () => router.push('/login') }, { text: 'Để sau', style: 'cancel' }]
+      );
+      return;
+    }
+
     try {
       await toggleFavorite(id, !currentStatus);
       refresh(); // Refresh data after toggle
@@ -124,13 +136,13 @@ export default function FavoritesScreen() {
   const filteredFavorites = (favorites.length > 0 ? favorites : [])
     .filter(item => {
       if (!searchQuery.trim()) return true;
-      
+
       const normalizedQuery = normalizeText(searchQuery);
       const normalizedName = normalizeText(item.name);
       const normalizedLocation = normalizeText(item.rental || item.location || '');
-      
-      return normalizedName.includes(normalizedQuery) || 
-             normalizedLocation.includes(normalizedQuery);
+
+      return normalizedName.includes(normalizedQuery) ||
+        normalizedLocation.includes(normalizedQuery);
     })
     .sort((a, b) => {
       // Sort by name alphabetically (A-Z)
@@ -146,15 +158,15 @@ export default function FavoritesScreen() {
 
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
-  
+
   useFocusEffect(
     useCallback(() => {
       console.log('🔄 Auto refresh on focus...');
-      
+
       // Reset and animate entrance
       fadeAnim.setValue(0);
       slideAnim.setValue(30);
-      
+
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -167,7 +179,7 @@ export default function FavoritesScreen() {
           useNativeDriver: true,
         }),
       ]).start();
-      
+
       // Chỉ refresh nếu không có data hoặc có lỗi
       if (favorites.length === 0 || error) {
         const timer = setTimeout(() => {
@@ -175,7 +187,7 @@ export default function FavoritesScreen() {
             refreshRef.current();
           }
         }, 300); // Delay ngắn hơn
-        
+
         return () => clearTimeout(timer);
       }
     }, [fadeAnim, slideAnim, favorites.length, error])
@@ -189,7 +201,7 @@ export default function FavoritesScreen() {
         <ThemedText style={styles.headerSubtitle}>Danh sách yêu thích của bạn</ThemedText>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -232,7 +244,7 @@ export default function FavoritesScreen() {
           <View style={styles.emptyContainer}>
             <ThemedText style={styles.emptyEmoji}>💝</ThemedText>
             <ThemedText style={styles.emptyTitle}>
-              {searchQuery.trim() ? 
+              {searchQuery.trim() ?
                 `Không tìm thấy yêu thích nào với từ khóa "${searchQuery}"` :
                 'Không có yêu thích'
               }
@@ -246,7 +258,7 @@ export default function FavoritesScreen() {
         ) : (
           <View style={styles.favoritesList}>
             {filteredFavorites.map((item: any) => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 key={item.id}
                 style={styles.card}
                 activeOpacity={0.8}
@@ -256,21 +268,21 @@ export default function FavoritesScreen() {
                   {/* Temple Image */}
                   <View style={styles.imageContainer}>
                     <Image
-                      source={item.imageUrl ? 
-                        { uri: item.imageUrl } : 
+                      source={item.imageUrl ?
+                        { uri: item.imageUrl } :
                         require('@/assets/images/chua1.jpg')
                       }
                       style={styles.templeImage}
                       contentFit="cover"
                     />
                   </View>
-                  
+
                   {/* Temple Info */}
                   <View style={styles.cardInfo}>
                     <ThemedText style={styles.cardTitle} numberOfLines={2}>
                       {item.name}
                     </ThemedText>
-                    
+
                     <View style={styles.locationRow}>
                       <Ionicons name="location-outline" size={14} color="#666" />
                       <ThemedText style={styles.location} numberOfLines={1}>
@@ -278,17 +290,17 @@ export default function FavoritesScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  
+
                   {/* Favorite Button */}
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.favoriteButton}
                     onPress={() => handleToggleFavorite(item.id, item.isFavorite)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Ionicons 
-                      name="heart" 
-                      size={24} 
-                      color="#ff6b57" 
+                    <Ionicons
+                      name="heart"
+                      size={24}
+                      color="#ff6b57"
                     />
                   </TouchableOpacity>
                 </View>
@@ -306,7 +318,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  
+
   // Header Styles (giống explore.tsx)
   header: {
     backgroundColor: '#ffffff',
@@ -517,7 +529,7 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center', // Căn giữa tất cả elements theo chiều dọc
   },
-  
+
   // Image Styles
   imageContainer: {
     width: 80,
@@ -531,7 +543,7 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 8, // Bo tròn 4 góc giống với container
   },
-  
+
   // Info Styles
   cardInfo: {
     flex: 1,
@@ -555,7 +567,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     flex: 1,
   },
-  
+
   // Favorite Button
   favoriteButton: {
     padding: 8,

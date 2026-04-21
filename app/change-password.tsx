@@ -9,21 +9,21 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
-  ScrollView
+  View
 } from 'react-native';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  
+
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -49,14 +49,14 @@ export default function ChangePasswordScreen() {
 
     try {
       setLoading(true);
-      
+
       // 1. Re-authenticate user
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
       await reauthenticateWithCredential(user, credential);
-      
+
       // 2. Update password
       await updatePassword(user, newPassword);
-      
+
       Alert.alert('Thành công', 'Đã cập nhật mật khẩu mới.', [
         { text: 'OK', onPress: () => router.replace('/profile') }
       ]);
@@ -83,7 +83,7 @@ export default function ChangePasswordScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
@@ -139,13 +139,13 @@ export default function ChangePasswordScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity 
-              style={[styles.saveButton, loading && styles.disabledButton]} 
+            <TouchableOpacity
+              style={[styles.saveButton, loading && styles.disabledButton]}
               onPress={handleSave}
               disabled={loading}
             >
               <ThemedText style={styles.saveButtonText}>
-                {loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu'}
+                {loading ? 'Đang cập nhật...' : 'Cập nhật mật khẩu mới'}
               </ThemedText>
             </TouchableOpacity>
           </View>

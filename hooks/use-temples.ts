@@ -1,5 +1,5 @@
 import { getFavoriteTemples, getTemples, Temple } from '@/services/firebase-service';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export function useTemples() {
   const [temples, setTemples] = useState<Temple[]>([]);
@@ -30,21 +30,26 @@ export function useTemples() {
   return { temples, loading, error, refresh };
 }
 
-export function useFavoriteTemples() {
+export function useFavoriteTemples(userId?: string) {
   const [favorites, setFavorites] = useState<Temple[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
 
-  const loadFavorites = async () => {
+  const loadFavorites = useCallback(async () => {
+    if (!userId) {
+      setFavorites([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      console.log('🔄 Loading favorites...');
+      console.log('🔄 Loading favorites for user:', userId);
       
-      // Tăng timeout lên 10 giây để đảm bảo Firebase có đủ thời gian
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout after 10s')), 10000)
+        setTimeout(() => reject(new Error('Request timeout after 25s')), 25000)
       );
       
       const dataPromise = getFavoriteTemples();
@@ -52,36 +57,37 @@ export function useFavoriteTemples() {
       
       console.log('✅ Favorites loaded:', data?.length || 0);
       setFavorites(data || []);
-      console.log('Favorites updated:', data?.length || 0);
     } catch (err) {
       console.error('❌ Error loading favorites:', err);
       setError(err as Error);
-      // Không set empty array ngay lập tức, giữ data cũ nếu có
       if (favorites.length === 0) {
         setFavorites([]);
       }
     } finally {
-      console.log('🏁 Loading finished');
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    loadFavorites();
-  }, []);
+    if (userId) {
+      loadFavorites();
+    } else {
+      setFavorites([]);
+      setLoading(false);
+    }
+  }, [userId]);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
+    if (!userId) return;
+    
     const now = Date.now();
-    // Giảm debounce xuống 1 giây để responsive hơn
     if (now - lastRefreshTime < 1000) {
-      console.log('🚫 Refresh debounced (too soon)');
       return;
     }
     
-    console.log('🔄 Refreshing favorites...');
     setLastRefreshTime(now);
     loadFavorites();
-  };
+  }, [userId, lastRefreshTime, loadFavorites]);
 
   return { favorites, loading, error, refresh };
 }

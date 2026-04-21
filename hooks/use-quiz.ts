@@ -10,7 +10,7 @@ import {
     submitQuizResult,
     UserScore
 } from '@/services/quiz-service';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 // Hook to get all quizzes
 export function useQuizzes() {
@@ -111,7 +111,7 @@ export function useQuizCategories() {
 }
 
 // Hook to get user score and progress
-export function useUserScore(userId: string) {
+export function useUserScore(userId?: string) {
   const [userScore, setUserScore] = useState<UserScore | null>(null);
   const [progress, setProgress] = useState({
     completedQuizzes: 0,
@@ -120,16 +120,28 @@ export function useUserScore(userId: string) {
     averageScore: 0,
     rank: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (userId) {
       loadUserData();
+    } else {
+      setUserScore(null);
+      setProgress({
+        completedQuizzes: 0,
+        totalQuizzes: 0,
+        totalScore: 0,
+        averageScore: 0,
+        rank: 0
+      });
+      setLoading(false);
     }
   }, [userId]);
 
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
+    if (!userId) return;
+    
     try {
       setLoading(true);
       const [scoreData, progressData] = await Promise.all([
@@ -155,12 +167,16 @@ export function useUserScore(userId: string) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   const submitResult = async (
     username: string,
     quizResult: Parameters<typeof submitQuizResult>[2]
   ) => {
+    if (!userId) {
+      throw new Error('User must be logged in to submit quiz results');
+    }
+    
     try {
       await submitQuizResult(userId, username, quizResult);
       // Reload user data after submitting
@@ -171,9 +187,9 @@ export function useUserScore(userId: string) {
     }
   };
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     loadUserData();
-  };
+  }, [loadUserData]);
 
   return { userScore, progress, loading, error, submitResult, refresh };
 }

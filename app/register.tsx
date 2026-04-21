@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import {
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { register } = useAuth();
 
   const [name, setName] = useState('');
@@ -54,8 +55,19 @@ export default function RegisterScreen() {
       setLoading(false); // Reset loading state
       setLoading(true);
       await register(name, email, password);
-      // Success is handled by AuthContext state change and navigation if needed
-      router.replace('/profile');
+      // Success: Precise redirection based on where we came from
+      if (params.from === 'pagoda-detail' && params.templeId) {
+        router.replace({
+          pathname: '/pagoda-detail',
+          params: { id: params.templeId }
+        });
+      } else if (params.from === 'profile') {
+        router.replace('/profile');
+      } else if (params.from) {
+        router.back();
+      } else {
+        router.replace('/profile');
+      }
     } catch (error: any) {
       console.warn('Registration error:', error);
       let errorMessage = 'Đã có lỗi xảy ra khi đăng ký.';
@@ -81,7 +93,16 @@ export default function RegisterScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Header Section */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/login')}>
+            <TouchableOpacity 
+              style={styles.backBtn} 
+              onPress={() => {
+                // Go back to login but KEEP the redirection params
+                router.replace({
+                  pathname: '/login',
+                  params: { ...params }
+                });
+              }}
+            >
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
             <ThemedText style={styles.title}>Tạo tài khoản</ThemedText>
@@ -167,15 +188,18 @@ export default function RegisterScreen() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <ThemedText style={styles.registerBtnText}>Đăng ký ngay</ThemedText>
+                <ThemedText style={styles.registerBtnText} numberOfLines={1}>Đăng ký ngay</ThemedText>
               )}
             </TouchableOpacity>
 
             {/* Login Link */}
             <View style={styles.footer}>
               <ThemedText style={styles.footerText}>Đã có tài khoản? </ThemedText>
-              <TouchableOpacity onPress={() => router.push('/login')}>
-                <ThemedText style={styles.loginLink}>Đăng nhập</ThemedText>
+              <TouchableOpacity onPress={() => router.replace({
+                pathname: '/login',
+                params: { ...params }
+              })}>
+                <ThemedText style={styles.loginLink} numberOfLines={1}>Đăng nhập</ThemedText>
               </TouchableOpacity>
             </View>
           </View>

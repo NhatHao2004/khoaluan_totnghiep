@@ -2,17 +2,19 @@ import { ThemedText } from '@/components/themed-text';
 import { useTemples } from '@/hooks/use-temples';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { toggleFavorite } from '@/services/firebase-service';
+import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 // Local images for pagodas
@@ -51,6 +53,7 @@ const getPagodaImage = (templeId: string, templeName: string) => {
 
 export default function PagodaScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const tintColor = useThemeColor({}, 'tint');
   const { temples, loading, error, refresh } = useTemples();
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,6 +96,18 @@ export default function PagodaScreen() {
   // Hệ thống sẽ chỉ lấy dữ liệu mới khi User chủ động vuốt Pull-to-refresh.
 
   const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
+    if (!user) {
+      Alert.alert(
+        'Thông báo',
+        'Vui lòng đăng nhập để lưu địa điểm yêu thích.',
+        [
+          { text: 'Để sau', style: 'cancel' },
+          { text: 'Đăng nhập', onPress: () => router.push('/login') }
+        ]
+      );
+      return;
+    }
+    
     try {
       await toggleFavorite(id, !currentStatus);
       refresh();

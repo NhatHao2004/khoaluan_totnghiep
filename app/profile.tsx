@@ -21,13 +21,11 @@ import {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, userData, loading: authLoading, logout, updateAvatar } = useAuth();
-  const { favorites, loading, refresh } = useFavoriteTemples();
+  const { favorites, loading, refresh } = useFavoriteTemples(user?.uid);
 
   const [uploading, setUploading] = useState(false);
 
-  // Temporary user ID - in production, get from auth
-  const userId = user?.uid || 'user_demo_001';
-  const { progress, loading: progressLoading, refresh: refreshProgress } = useUserScore(userId);
+  const { progress, loading: progressLoading, refresh: refreshProgress } = useUserScore(user?.uid);
 
   const scrollRef = useRef<ScrollView>(null);
   const [showFallback, setShowFallback] = useState(false);
@@ -74,12 +72,19 @@ export default function ProfileScreen() {
       }, 100); // Delay nhỏ để tránh conflict
 
       return () => clearTimeout(timer);
-    }, []) // Không depend vào refresh functions để tránh vòng lặp
+    }, [refresh, refreshProgress]) // Include refresh functions to ensure they are called correctly when focused
   );
 
   const handleMenuPress = (item: string) => {
     if (!user && item !== 'about') {
-      Alert.alert('Thông báo', 'Đăng nhập để sử dụng tính năng này.');
+      Alert.alert(
+        'Thông báo',
+        'Đăng nhập để sử dụng tính năng này.',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Đăng nhập', onPress: () => router.push({ pathname: '/login', params: { from: 'profile' } }) }
+        ]
+      );
       return;
     }
 
@@ -100,7 +105,7 @@ export default function ProfileScreen() {
         Alert.alert('Thông báo', 'Bạn hiện chưa có thông báo nào.');
         break;
       case 'about':
-        Alert.alert('Về ứng dụng', 'KhmerGo version 1.0.0\nKhám phá văn hóa Khmer tại Việt Nam.');
+        Alert.alert('Về ứng dụng', 'KhmerGo version 1.0.0.\nKhám phá văn hóa Khmer tại KhmerGo.');
         break;
       case 'logout':
         if (!user) {
@@ -132,7 +137,14 @@ export default function ProfileScreen() {
 
   const handlePickImage = async () => {
     if (!user) {
-      Alert.alert('Thông báo', 'Vui lòng đăng nhập để thay đổi ảnh đại diện.');
+      Alert.alert(
+        'Thông báo',
+        'Đăng nhập để thay đổi ảnh đại diện.',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Đăng nhập', onPress: () => router.push({ pathname: '/login', params: { from: 'profile' } }) }
+        ]
+      );
       return;
     }
 
@@ -168,9 +180,12 @@ export default function ProfileScreen() {
         {!user && !authLoading && (
           <TouchableOpacity
             style={styles.headerLoginBtn}
-            onPress={() => router.push('/login')}
+            onPress={() => router.push({
+              pathname: '/login',
+              params: { from: 'profile' }
+            })}
           >
-            <ThemedText style={styles.headerLoginBtnText}>Đăng nhập</ThemedText>
+            <ThemedText style={styles.headerLoginBtnText} numberOfLines={1}>Đăng nhập</ThemedText>
           </TouchableOpacity>
         )}
       </View>
@@ -221,7 +236,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileInfo}>
-            <ThemedText style={styles.name} numberOfLines={2}>
+            <ThemedText style={styles.name} numberOfLines={1}>
               {user ? (userData?.fullName || user.displayName || 'Người dùng') : 'Khách'}
             </ThemedText>
             <ThemedText style={styles.email}>
@@ -374,6 +389,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
+    flexShrink: 0,
+    marginLeft: 10,
   },
   headerLoginBtnText: {
     color: '#ffffff',

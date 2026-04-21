@@ -31,10 +31,10 @@ export const getTemples = async (): Promise<Temple[]> => {
   try {
     console.log('🔄 getTemples: Starting...');
     
-    // Thêm timeout cho Firestore query
+    // Thêm timeout cho Firestore query (tăng lên 20s cho mạng yếu)
     const queryPromise = getDocs(collection(db, templesCollection));
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Firestore query timeout')), 8000)
+      setTimeout(() => reject(new Error('Firestore query timeout')), 20000)
     );
     
     const querySnapshot = await Promise.race([queryPromise, timeoutPromise]) as any;
@@ -53,10 +53,10 @@ export const getTemples = async (): Promise<Temple[]> => {
     
     console.log('✅ getTemples: Success, got', temples.length, 'temples');
     return temples;
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error getting temples:', error);
-    // Return empty array instead of throwing to prevent app crash
-    return [];
+    // Nếu bị timeout hoặc lỗi mạng, ta ném lỗi để UI xử lý (hiện nút Thử lại)
+    throw error;
   }
 };
 

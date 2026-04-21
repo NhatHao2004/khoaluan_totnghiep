@@ -1,11 +1,13 @@
 import PagodaContentSection from '@/components/pagoda-content-section';
 import { ThemedText } from '@/components/themed-text';
+import { useAuth } from '@/contexts/AuthContext';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getTemples, Temple, toggleFavorite } from '@/services/firebase-service';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Image,
   ScrollView,
@@ -28,7 +30,7 @@ const getPagodaImage = (templeId: string, templeName: string) => {
   if (PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES]) {
     return PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES];
   }
-  
+
   const nameKey = templeName.toLowerCase()
     .replace(/chùa\s*/g, 'chua-')
     .replace(/\s+/g, '-')
@@ -39,23 +41,24 @@ const getPagodaImage = (templeId: string, templeName: string) => {
     .replace(/[ùúụủũưừứựửữ]/g, 'u')
     .replace(/[ỳýỵỷỹ]/g, 'y')
     .replace(/đ/g, 'd');
-    
+
   if (PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES]) {
     return PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES];
   }
-  
+
   return PAGODA_IMAGES.default;
 };
 
 export default function PagodaDetailScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const params = useLocalSearchParams();
   const tintColor = useThemeColor({}, 'tint');
-  
+
   const extractTempleFromParams = () => {
     let parsedAdditionalImages = undefined;
     let parsedDetailedDescription = undefined;
-    
+
     try {
       if (params.additionalImages) {
         parsedAdditionalImages = JSON.parse(params.additionalImages as string);
@@ -66,7 +69,7 @@ export default function PagodaDetailScreen() {
     } catch (e) {
       console.warn("Could not parse extended params", e);
     }
-    
+
     return {
       id: params.id as string,
       name: params.name as string,
@@ -92,7 +95,7 @@ export default function PagodaDetailScreen() {
     const freshTemple = extractTempleFromParams();
     setTemple(freshTemple);
     setIsFavorite(freshTemple.isFavorite || false);
-    
+
     // Reset thanh cuộn lên đầu cùng màn hình
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [params.id]);
@@ -118,13 +121,34 @@ export default function PagodaDetailScreen() {
           console.error('Error loading temple data:', error);
         }
       };
-      
+
       loadTempleData();
       return () => { isActive = false; };
     }, [params.id])
   );
 
   const handleToggleFavorite = async () => {
+    if (!user) {
+      Alert.alert(
+        'Thông báo',
+        'Đăng nhập để lưu địa điểm yêu thích.',
+        [
+          { text: 'Để sau', style: 'cancel' },
+          { 
+            text: 'Đăng nhập', 
+            onPress: () => router.push({
+              pathname: '/login',
+              params: { 
+                from: 'pagoda-detail',
+                templeId: temple.id 
+              }
+            }) 
+          }
+        ]
+      );
+      return;
+    }
+
     try {
       const newFavoriteStatus = !isFavorite;
       await toggleFavorite(temple.id!, newFavoriteStatus);
@@ -140,41 +164,41 @@ export default function PagodaDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backBtn} 
+        <TouchableOpacity
+          style={styles.backBtn}
           onPress={() => router.push('/pagoda')}
         >
           <Ionicons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
-        
+
         <ThemedText style={styles.headerTitle}>Chi tiết chùa</ThemedText>
       </View>
 
       {/* Scrollable Content */}
-      <ScrollView 
+      <ScrollView
         ref={scrollViewRef}
-        style={styles.scrollableContent} 
+        style={styles.scrollableContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero Section */}
         <View style={styles.heroSection}>
           <View style={styles.heroImageContainer}>
             <Image
-              source={temple.imageUrl ? 
-                { uri: temple.imageUrl } : 
+              source={temple.imageUrl ?
+                { uri: temple.imageUrl } :
                 getPagodaImage(temple.id || '', temple.name)
               }
               style={styles.heroImage}
             />
             {/* Favorite Button */}
-            <TouchableOpacity 
-              style={styles.favoriteBtn} 
+            <TouchableOpacity
+              style={styles.favoriteBtn}
               onPress={handleToggleFavorite}
             >
-              <Ionicons 
-                name={isFavorite ? "heart" : "heart-outline"} 
-                size={24} 
-                color={isFavorite ? "#ff1e00ff" : "#000000ff"} 
+              <Ionicons
+                name={isFavorite ? "heart" : "heart-outline"}
+                size={24}
+                color={isFavorite ? "#ff1e00ff" : "#000000ff"}
               />
             </TouchableOpacity>
           </View>
@@ -193,7 +217,7 @@ export default function PagodaDetailScreen() {
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
           <View style={styles.actionButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnPrimary]}
               onPress={() => {
                 router.push({
@@ -217,7 +241,7 @@ export default function PagodaDetailScreen() {
               <Ionicons name="navigate" size={16} color="#ffffff" />
               <ThemedText style={styles.actionBtnText}>Chỉ đường</ThemedText>
             </TouchableOpacity>
-            
+
             <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSecondary]}>
               <Ionicons name="help-circle" size={16} color="#ffffff" />
               <ThemedText style={styles.actionBtnText}>Quiz</ThemedText>

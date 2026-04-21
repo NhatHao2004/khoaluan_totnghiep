@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { login } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -34,8 +35,19 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await login(email, password);
-      // Success is handled by AuthContext state change
-      router.replace('/profile');
+      // Success: Precise redirection based on where we came from
+      if (params.from === 'pagoda-detail' && params.templeId) {
+        router.replace({
+          pathname: '/pagoda-detail',
+          params: { id: params.templeId }
+        });
+      } else if (params.from === 'profile') {
+        router.replace('/profile');
+      } else if (params.from) {
+        router.back();
+      } else {
+        router.replace('/profile');
+      }
     } catch (error: any) {
       console.warn('Login error:', error);
       let errorMessage = 'Email hoặc mật khẩu không chính xác.';
@@ -61,7 +73,21 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Header Section */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/profile')}>
+            <TouchableOpacity 
+              style={styles.backBtn} 
+              onPress={() => {
+                if (params.from === 'pagoda-detail' && params.templeId) {
+                  router.replace({
+                    pathname: '/pagoda-detail',
+                    params: { id: params.templeId }
+                  });
+                } else if (params.from === 'profile') {
+                  router.replace('/profile');
+                } else {
+                  router.back();
+                }
+              }}
+            >
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
             <ThemedText style={styles.title}>Chào mừng trở lại</ThemedText>
@@ -122,14 +148,17 @@ export default function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <ThemedText style={styles.loginBtnText}>Đăng nhập</ThemedText>
+                <ThemedText style={styles.loginBtnText} numberOfLines={1}>Đăng nhập</ThemedText>
               )}
             </TouchableOpacity>
 
             {/* Register Link */}
             <View style={styles.footer}>
               <ThemedText style={styles.footerText}>Chưa có tài khoản? </ThemedText>
-              <TouchableOpacity onPress={() => router.push('/register')}>
+              <TouchableOpacity onPress={() => router.push({
+                pathname: '/register',
+                params: { ...params }
+              })}>
                 <ThemedText style={styles.registerLink}>Đăng ký ngay</ThemedText>
               </TouchableOpacity>
             </View>
