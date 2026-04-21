@@ -676,7 +676,7 @@ export default function DirectionsScreen() {
                 <Ionicons
                   name={isNavCardExpanded ? "chevron-up" : "chevron-down"}
                   size={28}
-                  color="#ff0000ff"
+                  color="#000000ff"
                 />
               </TouchableOpacity>
             )}
