@@ -9,13 +9,12 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
-  Image,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 
 const { width, height } = Dimensions.get('window');
 
@@ -158,6 +157,7 @@ export default function DirectionsScreen() {
   const [currentStep, setCurrentStep] = useState<NavigationStep | null>(null);
   const [navigationSteps, setNavigationSteps] = useState<NavigationStep[]>([]);
   const [heading, setHeading] = useState<number>(0);
+  const [isNavCardExpanded, setIsNavCardExpanded] = useState(true);
 
   // Map settings
   const [mapType, setMapType] = useState<'standard' | 'hybrid'>('standard');
@@ -574,13 +574,12 @@ export default function DirectionsScreen() {
         <View style={styles.fullMapContainer}>
           <MapView
             ref={mapRef}
-            provider={PROVIDER_GOOGLE}
             style={styles.fullMap}
             mapType={mapType}
             showsUserLocation={!isNavigating}
             showsMyLocationButton={false}
             showsCompass={false}
-            showsTraffic={true}
+            showsTraffic={false}
             initialRegion={location ? {
               latitude: (location.coords.latitude + temple.latitude) / 2,
               longitude: (location.coords.longitude + temple.longitude) / 2,
@@ -667,6 +666,20 @@ export default function DirectionsScreen() {
                 {temple.name}
               </ThemedText>
             </View>
+
+            {/* Expand/Collapse Navigation Card Button */}
+            {isNavigating && (
+              <TouchableOpacity
+                onPress={() => setIsNavCardExpanded(!isNavCardExpanded)}
+                style={{ padding: 4 }}
+              >
+                <Ionicons
+                  name={isNavCardExpanded ? "chevron-up" : "chevron-down"}
+                  size={28}
+                  color="#ff0000ff"
+                />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Map Control Buttons */}
@@ -694,7 +707,7 @@ export default function DirectionsScreen() {
           </View>
 
           {/* Navigation Instructions Card (when navigating) */}
-          {isNavigating && currentStep && (
+          {isNavigating && currentStep && isNavCardExpanded && (
             <View style={styles.floatingNavigationCard}>
               <View style={styles.navCardHeader}>
                 <View style={styles.navManeuverIcon}>
@@ -742,16 +755,7 @@ export default function DirectionsScreen() {
             >
               {!isNavigating ? (
                 <>
-                  {/* Temple Quick Info */}
-                  <View style={styles.templeQuickInfo}>
-                    <Image
-                      source={temple.imageUrl ?
-                        { uri: temple.imageUrl } :
-                        getPagodaImage(temple.id || '', temple.name)
-                      }
-                      style={styles.templeQuickImage}
-                    />
-                  </View>
+                  {/* Temple Quick Info Removed */}
 
                   {/* Travel Mode Selector */}
                   <View style={styles.travelModeSelector}>
@@ -809,16 +813,7 @@ export default function DirectionsScreen() {
                 </>
               ) : (
                 <>
-                  {/* Temple Quick Info - When Navigating */}
-                  <View style={styles.templeQuickInfo}>
-                    <Image
-                      source={temple.imageUrl ?
-                        { uri: temple.imageUrl } :
-                        getPagodaImage(temple.id || '', temple.name)
-                      }
-                      style={styles.templeQuickImage}
-                    />
-                  </View>
+                  {/* Temple Quick Info (Navigating) Removed */}
 
                   {/* Travel Mode Selector - When Navigating */}
                   <View style={styles.travelModeSelector}>
@@ -909,7 +904,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
-    gap: 12,
+    gap: 4,
   },
   floatingBackBtn: {
     width: 40,
@@ -1021,7 +1016,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    minHeight: 220,
     maxHeight: height * 0.6,
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
@@ -1031,7 +1025,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 10,
-    paddingBottom: 50,
+    paddingBottom: 45,
   },
   dragHandleContainer: {
     paddingVertical: 8,

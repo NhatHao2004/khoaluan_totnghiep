@@ -4,7 +4,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { getTemples, Temple, toggleFavorite } from '@/services/firebase-service';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import {
   Dimensions,
   Image,
@@ -52,30 +52,66 @@ export default function PagodaDetailScreen() {
   const params = useLocalSearchParams();
   const tintColor = useThemeColor({}, 'tint');
   
-  const [temple, setTemple] = useState<Temple>({
-    id: params.id as string,
-    name: params.name as string,
-    location: params.location as string,
-    rental: params.rental as string,
-    description: params.description as string,
-    imageUrl: params.imageUrl as string,
-    category: params.category as string,
-    isFavorite: params.isFavorite === 'true',
-    latitude: params.latitude ? parseFloat(params.latitude as string) : undefined,
-    longitude: params.longitude ? parseFloat(params.longitude as string) : undefined,
-  });
+  const extractTempleFromParams = () => {
+    let parsedAdditionalImages = undefined;
+    let parsedDetailedDescription = undefined;
+    
+    try {
+      if (params.additionalImages) {
+        parsedAdditionalImages = JSON.parse(params.additionalImages as string);
+      }
+      if (params.detailedDescription) {
+        parsedDetailedDescription = JSON.parse(params.detailedDescription as string);
+      }
+    } catch (e) {
+      console.warn("Could not parse extended params", e);
+    }
+    
+    return {
+      id: params.id as string,
+      name: params.name as string,
+      location: params.location as string,
+      rental: params.rental as string,
+      description: params.description as string,
+      imageUrl: params.imageUrl as string,
+      category: params.category as string,
+      isFavorite: params.isFavorite === 'true',
+      latitude: params.latitude ? parseFloat(params.latitude as string) : undefined,
+      longitude: params.longitude ? parseFloat(params.longitude as string) : undefined,
+      additionalImages: parsedAdditionalImages,
+      detailedDescription: parsedDetailedDescription,
+    };
+  };
 
+  const [temple, setTemple] = useState<Temple>(extractTempleFromParams);
   const [isFavorite, setIsFavorite] = useState(temple.isFavorite || false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  // Load fresh data from Firebase when screen is focused
+  // Ép cập nhật lại toàn bộ state khi người dùng bấm sang một ngổi chùa khác
+  useEffect(() => {
+    const freshTemple = extractTempleFromParams();
+    setTemple(freshTemple);
+    setIsFavorite(freshTemple.isFavorite || false);
+    
+    // Reset thanh cuộn lên đầu cùng màn hình
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  }, [params.id]);
+
+  // Thiết lập delay nhẹ và chỉ cập nhật state cụ thể (tránh load đè toàn bộ object gây giật ảnh)
   useFocusEffect(
     useCallback(() => {
+      let isActive = true;
       const loadTempleData = async () => {
         try {
+          // Delay load API để màn hình chuyển trang mượt mà ngay lập tức
+          await new Promise(resolve => setTimeout(resolve, 300));
+          if (!isActive) return;
+
           const temples = await getTemples();
           const updatedTemple = temples.find((t: Temple) => t.id === params.id);
-          if (updatedTemple) {
-            setTemple(updatedTemple);
+          if (updatedTemple && isActive) {
+            // Chỉ cập nhật trạng thái Favorite, không ghi đè lại toàn bộ state `temple`
+            // để tránh bức ảnh chính bị render lại dẫn tới chớp giật 
             setIsFavorite(updatedTemple.isFavorite || false);
           }
         } catch (error) {
@@ -84,6 +120,7 @@ export default function PagodaDetailScreen() {
       };
       
       loadTempleData();
+      return () => { isActive = false; };
     }, [params.id])
   );
 
@@ -114,7 +151,11 @@ export default function PagodaDetailScreen() {
       </View>
 
       {/* Scrollable Content */}
-      <ScrollView style={styles.scrollableContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.scrollableContent} 
+        showsVerticalScrollIndicator={false}
+      >
         {/* Hero Section */}
         <View style={styles.heroSection}>
           <View style={styles.heroImageContainer}>

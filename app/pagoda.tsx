@@ -91,12 +91,8 @@ export default function PagodaScreen() {
       .replace(/đ/g, 'd');
   };
 
-  // Auto refresh when screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      refresh();
-    }, [])
-  );
+  // Tối ưu: Bỏ tự động refresh mỗi khi focus để ngăn chặn component Image bị load lại (cà giật).
+  // Hệ thống sẽ chỉ lấy dữ liệu mới khi User chủ động vuốt Pull-to-refresh.
 
   const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
     try {
@@ -267,9 +263,8 @@ export default function PagodaScreen() {
                     }
                     style={styles.pagodaImage}
                     resizeMode="cover"
-                    // Tối ưu cho ảnh chất lượng cao
-                    fadeDuration={300}
-                    loadingIndicatorSource={require('@/assets/images/chua1.jpg')}
+                    // Tối ưu: Tắt fadeDuration và bỏ loadingIndicatorSource để ngăn chớp khung hình
+                    fadeDuration={0}
                   />
                   
                 </View>
