@@ -43,7 +43,7 @@ const getTempleImage = (templeId: string, fallbackUrl?: string) => {
     'temple2': FIREBASE_IMAGES.temple2,
     // Thêm mapping cho các temple khác
   };
-  
+
   return imageMap[templeId] || fallbackUrl || FIREBASE_IMAGES.defaultTemple;
 };
 
@@ -118,7 +118,7 @@ export default function HomeScreen() {
         location.coords.longitude,
         50 // 50km radius
       );
-      
+
       // Cập nhật khoảng cách đường đi thực tế từ OSRM API
       const templesWithRealDistance = await Promise.all(
         nearby.map(async (temple) => {
@@ -126,7 +126,7 @@ export default function HomeScreen() {
             const url = `https://router.project-osrm.org/route/v1/car/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=false`;
             const response = await fetch(url);
             const data = await response.json();
-            
+
             if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
               const realDistance = data.routes[0].distance / 1000; // Convert to km
               return { ...temple, distance: realDistance };
@@ -138,7 +138,7 @@ export default function HomeScreen() {
           }
         })
       );
-      
+
       // Sắp xếp lại theo khoảng cách thực tế và lấy 5 gần nhất
       templesWithRealDistance.sort((a, b) => a.distance - b.distance);
       setNearbyTemples(templesWithRealDistance.slice(0, 5)); // Show top 5 nearest
@@ -204,7 +204,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          
+
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <View style={styles.searchBox}>
@@ -226,8 +226,8 @@ export default function HomeScreen() {
         <View style={styles.servicesSection}>
           <View style={styles.servicesGrid}>
             {categories.map((category) => (
-              <TouchableOpacity 
-                key={category.id} 
+              <TouchableOpacity
+                key={category.id}
                 style={styles.serviceItem}
                 onPress={() => handleCategoryPress(category.id)}
               >
@@ -253,7 +253,7 @@ export default function HomeScreen() {
               <ThemedText style={styles.errorText}>
                 {locationError}
               </ThemedText>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.retryButton}
                 onPress={refreshLocation}
               >
@@ -280,7 +280,7 @@ export default function HomeScreen() {
                       📍 {item.distance.toFixed(1)} km
                     </ThemedText>
                   </View>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.directionBtn}
                     onPress={() => {
                       router.push({
@@ -405,10 +405,10 @@ const styles = StyleSheet.create({
   servicesSection: {
     backgroundColor: '#ffffff',
     padding: 18,
-    paddingBottom: 15,
+    paddingBottom: 10,
     marginHorizontal: 10,
-    marginTop: -20,
-    marginBottom: 10,
+    marginTop: -8,
+    marginBottom: 0,
     borderRadius: 20,
   },
   servicesGrid: {
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 20,
     paddingTop: 0,
-    paddingBottom: 100,
+    paddingBottom: 80,
   },
   mapHeader: {
     marginBottom: 12,
