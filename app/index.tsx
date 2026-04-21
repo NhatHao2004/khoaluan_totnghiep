@@ -1,8 +1,8 @@
 import { ThemedText } from '@/components/themed-text';
 import { useLocation } from '@/hooks/use-location';
-import { useFavoriteTemples, useTemples } from '@/hooks/use-temples';
+import { useTemples } from '@/hooks/use-temples';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getNearbyTemples, Temple, toggleFavorite } from '@/services/firebase-service';
+import { getNearbyTemples, Temple } from '@/services/firebase-service';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -55,7 +55,6 @@ export default function HomeScreen() {
 
   // Fetch data from Firebase
   const { temples, loading: templesLoading, error: templesError, refresh: refreshTemples } = useTemples();
-  const { favorites, loading: favoritesLoading, error: favoritesError, refresh: refreshFavorites } = useFavoriteTemples();
 
   // Get user location
   const { location, loading: locationLoading, error: locationError, refresh: refreshLocation } = useLocation();
@@ -99,7 +98,6 @@ export default function HomeScreen() {
     useCallback(() => {
       // Luôn refresh khi quay về trang index
       refreshTemples();
-      refreshFavorites();
       if (location) {
         loadNearbyTemples();
       }
@@ -108,13 +106,7 @@ export default function HomeScreen() {
     }, [location])
   );
 
-  // Listen to favorites changes
-  useEffect(() => {
-    // Force re-render when favorites data changes
-    if (favorites) {
-      console.log('Favorites updated:', favorites.length);
-    }
-  }, [favorites]);
+
 
   const loadNearbyTemples = async () => {
     if (!location) return;
@@ -147,9 +139,9 @@ export default function HomeScreen() {
         })
       );
       
-      // Sắp xếp lại theo khoảng cách thực tế và lấy 3 gần nhất
+      // Sắp xếp lại theo khoảng cách thực tế và lấy 5 gần nhất
       templesWithRealDistance.sort((a, b) => a.distance - b.distance);
-      setNearbyTemples(templesWithRealDistance.slice(0, 3)); // Show top 3 nearest
+      setNearbyTemples(templesWithRealDistance.slice(0, 5)); // Show top 5 nearest
     } catch (error) {
       console.error('Error loading nearby temples:', error);
     } finally {
@@ -157,21 +149,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
-    try {
-      await toggleFavorite(id, !currentStatus);
-      // Force refresh ngay lập tức
-      await refreshTemples();
-      await refreshFavorites();
-      if (location) {
-        await loadNearbyTemples();
-      }
-      // Force re-render
-      setForceUpdate(prev => prev + 1);
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-    }
-  };
+
 
   const handleCategoryPress = (categoryId: number) => {
     switch (categoryId) {
@@ -197,7 +175,6 @@ export default function HomeScreen() {
     try {
       // Refresh all data
       refreshTemples();
-      refreshFavorites();
       refreshLocation();
       if (location) {
         await loadNearbyTemples();
@@ -261,49 +238,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </View>
-        </View>
-
-        {/* Favorites Section */}
-        <View style={styles.featuredSection}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>Danh mục yêu thích</ThemedText>
-          </View>
-
-          {favoritesLoading ? (
-            <ActivityIndicator size="large" color={tintColor} style={styles.loader} />
-          ) : favoritesError ? (
-            <ThemedText style={styles.errorText}>
-              Không thể tải dữ liệu. Vui lòng kiểm tra kết nối Firebase.
-            </ThemedText>
-          ) : favorites.length === 0 ? (
-            <ThemedText style={styles.emptyText}>
-              Chưa có danh mục yêu thích
-            </ThemedText>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll} key={forceUpdate}>
-              {favorites.map((item) => (
-                <TouchableOpacity key={item.id} style={styles.featuredCard}>
-                  <TouchableOpacity
-                    style={styles.cardFavorite}
-                    onPress={() => handleToggleFavorite(item.id!, item.isFavorite || false)}
-                  >
-                    <ThemedText style={styles.heartIcon}>
-                      {item.isFavorite ? '❤️' : '🤍'}
-                    </ThemedText>
-                  </TouchableOpacity>
-                  <Image
-                    source={{
-                      uri: item.imageUrl || getTempleImage(item.id || '', FIREBASE_IMAGES.defaultTemple)
-                    }}
-                    style={styles.featuredCardImage}
-                  />
-                  <View style={styles.featuredCardContent}>
-                    <ThemedText style={styles.featuredCardTitle}>{item.name}</ThemedText>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
         </View>
 
         {/* Nearby Places Section */}
@@ -508,72 +442,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 14,
   },
-  featuredSection: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 10,
-    marginTop: -20,
-  },
-  sectionHeader: {
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  featuredScroll: {
-    paddingHorizontal: 20,
-  },
-  featuredCard: {
-    width: 280,
-    backgroundColor: '#ffffff',
-    borderRadius: 25,
-    padding: 8,
-    marginRight: 15,
-    position: 'relative',
-  },
-  cardFavorite: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    width: 38,
-    height: 38,
-    backgroundColor: 'white',
-    borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 5,
-  },
-  heartIcon: {
-    fontSize: 16,
-  },
-  featuredCardImage: {
-    width: '100%',
-    height: 140,
-    borderRadius: 20,
-    marginBottom: 8,
-  },
-  featuredCardContent: {
-    paddingHorizontal: 5,
-    paddingBottom: 3,
-  },
-  featuredCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2d2d2d',
-    marginBottom: 3,
-  },
-  featuredCardSubtitle: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: '#9e9e9e',
-  },
+
   mapSection: {
     backgroundColor: '#ffffff',
     padding: 20,
