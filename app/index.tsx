@@ -4,6 +4,7 @@ import { useFavoriteTemples, useTemples } from '@/hooks/use-temples';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getNearbyTemples, Temple, toggleFavorite } from '@/services/firebase-service';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,7 +22,7 @@ const categories = [
   { id: 1, icon: require('@/assets/images/pagoda.jpg'), label: 'Chùa Khmer' },
   { id: 2, icon: require('@/assets/images/festival.jpg'), label: 'Văn hóa' },
   { id: 3, icon: require('@/assets/images/amthuc.jpg'), label: 'Ẩm thực' },
-  { id: 4, icon: require('@/assets/images/tovisit.jpg'), label: 'Điểm đến' },
+  { id: 4, icon: require('@/assets/images/tovisit.jpg'), label: 'Khám phá' },
   { id: 5, icon: require('@/assets/images/community.jpg'), label: 'Cộng đồng' },
   { id: 6, icon: require('@/assets/images/hoctap.jpg'), label: 'Học tiếng Khmer' },
   { id: 7, icon: require('@/assets/images/quiz.jpg'), label: 'Thử thách' },
@@ -47,6 +48,7 @@ const getTempleImage = (templeId: string, fallbackUrl?: string) => {
 };
 
 export default function HomeScreen() {
+  const router = useRouter();
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
@@ -124,7 +126,30 @@ export default function HomeScreen() {
         location.coords.longitude,
         50 // 50km radius
       );
-      setNearbyTemples(nearby.slice(0, 3)); // Show top 3 nearest
+      
+      // Cập nhật khoảng cách đường đi thực tế từ OSRM API
+      const templesWithRealDistance = await Promise.all(
+        nearby.map(async (temple) => {
+          try {
+            const url = `https://router.project-osrm.org/route/v1/car/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=false`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+              const realDistance = data.routes[0].distance / 1000; // Convert to km
+              return { ...temple, distance: realDistance };
+            }
+            return temple; // Fallback to straight line distance
+          } catch (error) {
+            console.error('Error fetching route for temple:', temple.name, error);
+            return temple; // Fallback to straight line distance
+          }
+        })
+      );
+      
+      // Sắp xếp lại theo khoảng cách thực tế và lấy 3 gần nhất
+      templesWithRealDistance.sort((a, b) => a.distance - b.distance);
+      setNearbyTemples(templesWithRealDistance.slice(0, 3)); // Show top 3 nearest
     } catch (error) {
       console.error('Error loading nearby temples:', error);
     } finally {
@@ -145,6 +170,25 @@ export default function HomeScreen() {
       setForceUpdate(prev => prev + 1);
     } catch (error) {
       console.error('Error toggling favorite:', error);
+    }
+  };
+
+  const handleCategoryPress = (categoryId: number) => {
+    switch (categoryId) {
+      case 1: // Chùa Khmer
+        router.push('/pagoda');
+        break;
+      case 2: // Văn hóa
+        // TODO: Navigate to culture page
+        break;
+      case 3: // Ẩm thực
+        // TODO: Navigate to food page
+        break;
+      case 4: // Điểm đến
+        router.push('/explore');
+        break;
+      default:
+        console.log('Category not implemented yet:', categoryId);
     }
   };
 
@@ -205,7 +249,11 @@ export default function HomeScreen() {
         <View style={styles.servicesSection}>
           <View style={styles.servicesGrid}>
             {categories.map((category) => (
-              <TouchableOpacity key={category.id} style={styles.serviceItem}>
+              <TouchableOpacity 
+                key={category.id} 
+                style={styles.serviceItem}
+                onPress={() => handleCategoryPress(category.id)}
+              >
                 <View style={styles.serviceIcon}>
                   <Image source={category.icon} style={styles.serviceIconImage} />
                 </View>
@@ -298,7 +346,26 @@ export default function HomeScreen() {
                       📍 {item.distance.toFixed(1)} km
                     </ThemedText>
                   </View>
-                  <TouchableOpacity style={styles.directionBtn}>
+                  <TouchableOpacity 
+                    style={styles.directionBtn}
+                    onPress={() => {
+                      router.push({
+                        pathname: '/directions',
+                        params: {
+                          id: item.id,
+                          name: item.name,
+                          location: item.location || item.rental,
+                          rental: item.rental,
+                          description: item.description,
+                          imageUrl: item.imageUrl,
+                          category: item.category,
+                          latitude: item.latitude?.toString(),
+                          longitude: item.longitude?.toString(),
+                          source: 'index',
+                        }
+                      });
+                    }}
+                  >
                     <ThemedText style={styles.directionIcon}>→</ThemedText>
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -342,18 +409,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   appName: {
-    fontSize: 26,
+    fontSize: 38,
     fontWeight: '900',
     color: '#2C1810',
     marginBottom: 2,
+    lineHeight: 40,
+    includeFontPadding: true,
     textShadowColor: '#ffffff',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
   tagline: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
     color: 'rgba(0, 0, 0, 0.9)',
+    lineHeight: 28,
+    includeFontPadding: true,
     textShadowColor: '#ffffff',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,

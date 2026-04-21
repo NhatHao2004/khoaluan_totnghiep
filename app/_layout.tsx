@@ -111,6 +111,24 @@ export default function RootLayout() {
             ),
           }}
         />
+        <Tabs.Screen
+          name="pagoda"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="pagoda-detail"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
+        <Tabs.Screen
+          name="directions"
+          options={{
+            href: null, // Hide from tab bar
+          }}
+        />
       </Tabs>
       <StatusBar style="auto" />
     </ThemeProvider>
