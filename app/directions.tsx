@@ -31,7 +31,7 @@ const getPagodaImage = (templeId: string, templeName: string) => {
   if (PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES]) {
     return PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES];
   }
-  
+
   const nameKey = templeName.toLowerCase()
     .replace(/chùa\s*/g, 'chua-')
     .replace(/\s+/g, '-')
@@ -42,11 +42,11 @@ const getPagodaImage = (templeId: string, templeName: string) => {
     .replace(/[ùúụủũưừứựửữ]/g, 'u')
     .replace(/[ỳýỵỷỹ]/g, 'y')
     .replace(/đ/g, 'd');
-    
+
   if (PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES]) {
     return PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES];
   }
-  
+
   return PAGODA_IMAGES.default;
 };
 
@@ -63,9 +63,9 @@ function calculateDistance(
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -86,11 +86,11 @@ function calculateTravelTime(distance: number, mode: 'driving' | 'walking' | 'mo
     default:
       speed = 40;
   }
-  
+
   const timeInHours = distance / speed;
   const hours = Math.floor(timeInHours);
   const minutes = Math.round((timeInHours - hours) * 60);
-  
+
   if (hours > 0) {
     // Format: 1:30 (1 giờ 30 phút)
     return `${hours}:${minutes.toString().padStart(2, '0')}`;
@@ -109,18 +109,48 @@ interface NavigationStep {
   maneuver?: string;
 }
 
+// Convert OSRM maneuver to Vietnamese instruction
+const getVietnameseInstruction = (step: any): string => {
+  const { maneuver, name } = step;
+  const modifier = maneuver?.modifier || '';
+  const type = maneuver?.type || '';
+
+  let action = 'Đi thẳng';
+
+  if (type === 'arrive') {
+    return 'Đã đến nơi';
+  } else if (type === 'depart') {
+    action = 'Bắt đầu';
+  } else if (type === 'roundabout') {
+    action = 'Đi vào vòng xuyến';
+  } else {
+    // Handle 'turn', 'end of road', etc.
+    if (modifier.includes('left')) action = 'Rẽ trái';
+    else if (modifier.includes('right')) action = 'Rẽ phải';
+    else if (modifier.includes('uturn')) action = 'Quay đầu';
+  }
+
+  if (name && action !== 'Bắt đầu' && action !== 'Đã đến nơi') {
+    return `${action} vào ${name}`;
+  } else if (name && action === 'Bắt đầu') {
+    return `Bắt đầu đi trên ${name}`;
+  }
+
+  return action;
+};
+
 export default function DirectionsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const tintColor = useThemeColor({}, 'tint');
   const { location, loading: locationLoading, error: locationError } = useLocation();
-  
+
   const [selectedMode, setSelectedMode] = useState<'driving' | 'walking' | 'motorbike'>('motorbike');
   const [distance, setDistance] = useState<number | null>(null);
   const [travelTime, setTravelTime] = useState<string>('');
-  const [routeCoordinates, setRouteCoordinates] = useState<{latitude: number, longitude: number}[]>([]);
+  const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number, longitude: number }[]>([]);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
-  
+
   // Navigation state
   const [isNavigating, setIsNavigating] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
@@ -128,14 +158,27 @@ export default function DirectionsScreen() {
   const [currentStep, setCurrentStep] = useState<NavigationStep | null>(null);
   const [navigationSteps, setNavigationSteps] = useState<NavigationStep[]>([]);
   const [heading, setHeading] = useState<number>(0);
-  
+
+  // Map settings
+  const [mapType, setMapType] = useState<'standard' | 'hybrid'>('standard');
   const mapRef = useRef<MapView>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
+
+
   const handleBackPress = () => {
+    // Dừng dẫn đường tự động khi chuyển trang
+    if (isNavigating) {
+      setIsNavigating(false);
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+        locationSubscription.current = null;
+      }
+    }
+
     // Get the source page from params to navigate back correctly
     const source = params.source as string;
-    
+
     if (source === 'pagoda-detail') {
       router.push({
         pathname: '/pagoda-detail',
@@ -179,19 +222,20 @@ export default function DirectionsScreen() {
     longitude: params.longitude ? parseFloat(params.longitude as string) : undefined,
   };
 
+  // Reset trạng thái dẫn đường khi chuyển sang xem chùa mới
+  useEffect(() => {
+    setIsNavigating(false);
+    if (locationSubscription.current) {
+      locationSubscription.current.remove();
+      locationSubscription.current = null;
+    }
+  }, [temple.id]);
+
   // Calculate distance and travel time when location is available
   useEffect(() => {
     if (location && temple.latitude && temple.longitude) {
-      const dist = calculateDistance(
-        location.coords.latitude,
-        location.coords.longitude,
-        temple.latitude,
-        temple.longitude
-      );
-      setDistance(dist);
-      setTravelTime(calculateTravelTime(dist, selectedMode));
       setCurrentLocation(location);
-      
+
       // Fetch route
       fetchRoute();
     }
@@ -206,18 +250,13 @@ export default function DirectionsScreen() {
     };
   }, []);
 
-  // Recalculate travel time when mode changes
-  useEffect(() => {
-    if (distance) {
-      setTravelTime(calculateTravelTime(distance, selectedMode));
-    }
-  }, [selectedMode, distance]);
+
 
   const fetchRoute = async () => {
     if (!location || !temple.latitude || !temple.longitude) return;
-    
+
     setIsLoadingRoute(true);
-    
+
     console.log('� Strart location:', location.coords.latitude, location.coords.longitude);
     console.log('🏯 Temple location:', temple.latitude, temple.longitude);
     console.log('📏 Straight line distance:', calculateDistance(
@@ -226,74 +265,78 @@ export default function DirectionsScreen() {
       temple.latitude,
       temple.longitude
     ).toFixed(2), 'km');
-    
+
     try {
       // OSRM API - Free, no API key needed!
       // Convert travel mode
       let profile = 'car';
       if (selectedMode === 'walking') profile = 'foot';
       else if (selectedMode === 'motorbike') profile = 'car'; // Use car for motorbike
-      
+
       // Add alternatives=true to get multiple routes and pick shortest
       const url = `https://router.project-osrm.org/route/v1/${profile}/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=full&geometries=geojson&alternatives=true&steps=true`;
-      
+
       console.log('🗺️ Fetching route from OSRM...');
-      
+
       const response = await fetch(url);
       const data = await response.json();
-      
+
       console.log('📡 API Response status:', data.code);
-      
+
       if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
         // Sort routes by distance to get the shortest one
         const sortedRoutes = data.routes.sort((a: any, b: any) => a.distance - b.distance);
         const route = sortedRoutes[0]; // Pick shortest route
-        
+
         console.log('✅ Route found! Coordinates count:', route.geometry.coordinates.length);
         console.log('📊 Found', data.routes.length, 'alternative routes, using shortest');
         console.log('🛣️ Route distance from API:', (route.distance / 1000).toFixed(2), 'km');
-        
+
         // Convert GeoJSON coordinates to React Native Maps format
         const coordinates = route.geometry.coordinates.map((coord: number[]) => ({
           latitude: coord[1],
           longitude: coord[0],
         }));
-        
+
         console.log('🗺️ First 3 route points:', coordinates.slice(0, 3));
         console.log('🗺️ Last 3 route points:', coordinates.slice(-3));
-        
+
         setRouteCoordinates(coordinates);
-        
+
         // Extract navigation steps
         if (route.legs && route.legs[0] && route.legs[0].steps) {
           const steps: NavigationStep[] = route.legs[0].steps.map((step: any) => ({
-            instruction: step.name || 'Tiếp tục đi',
+            instruction: getVietnameseInstruction(step),
             distance: step.distance,
             duration: step.duration,
             location: step.maneuver.location,
-            maneuver: step.maneuver.type
+            maneuver: step.maneuver.modifier ? `${step.maneuver.type} ${step.maneuver.modifier}` : step.maneuver.type
           }));
           setNavigationSteps(steps);
           if (steps.length > 0) {
             setCurrentStep(steps[0]);
           }
         }
-        
+
         // Update distance and time from API
-        setDistance(route.distance / 1000); // Convert meters to km
-        setRemainingDistance(route.distance / 1000);
-        const durationMinutes = Math.round(route.duration / 60);
-        const hours = Math.floor(durationMinutes / 60);
-        const minutes = durationMinutes % 60;
-        // Format: 1:30 or 0:45
-        setTravelTime(hours > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}` : `0:${minutes.toString().padStart(2, '0')}`);
-        
-        console.log('⏱️ Duration:', hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`);
+        const actualDistanceKm = route.distance / 1000;
+        setDistance(actualDistanceKm); // Convert meters to km
+        setRemainingDistance(actualDistanceKm);
+
+        // Đoạn này dùng hàm tự tính thời gian thay vì API
+        const realisticTime = calculateTravelTime(actualDistanceKm, selectedMode);
+        setTravelTime(realisticTime);
+
+        console.log('⏱️ Duration calculated:', realisticTime);
         setIsLoadingRoute(false);
       } else {
         console.log('⚠️ No route found in API response, using straight line');
         console.log('Error:', data.message || 'Unknown error');
         // Fallback to straight line if API fails
+        const dist = calculateDistance(location.coords.latitude, location.coords.longitude, temple.latitude, temple.longitude);
+        setDistance(dist);
+        setTravelTime(calculateTravelTime(dist, selectedMode));
+
         setRouteCoordinates([
           {
             latitude: location.coords.latitude,
@@ -309,6 +352,10 @@ export default function DirectionsScreen() {
     } catch (error) {
       console.error('❌ Error fetching route:', error);
       // Fallback to straight line
+      const dist = calculateDistance(location.coords.latitude, location.coords.longitude, temple.latitude, temple.longitude);
+      setDistance(dist);
+      setTravelTime(calculateTravelTime(dist, selectedMode));
+
       setRouteCoordinates([
         {
           latitude: location.coords.latitude,
@@ -344,7 +391,7 @@ export default function DirectionsScreen() {
         },
         (newLocation) => {
           setCurrentLocation(newLocation);
-          
+
           // Update heading/bearing
           if (newLocation.coords.heading !== null && newLocation.coords.heading !== undefined) {
             setHeading(newLocation.coords.heading);
@@ -364,7 +411,7 @@ export default function DirectionsScreen() {
               stopNavigation();
               Alert.alert('Đã đến nơi!', `Bạn đã đến ${temple.name}`);
             }
-            
+
             // Update remaining distance based on route (not straight line)
             // Keep the original distance from API route for display
             // Only update if we have navigation steps
@@ -372,7 +419,7 @@ export default function DirectionsScreen() {
               // Calculate remaining distance along the route
               let remainingRouteDistance = 0;
               let foundCurrentStep = false;
-              
+
               for (const step of navigationSteps) {
                 if (step === currentStep) {
                   foundCurrentStep = true;
@@ -381,7 +428,7 @@ export default function DirectionsScreen() {
                   remainingRouteDistance += step.distance / 1000; // Convert to km
                 }
               }
-              
+
               if (remainingRouteDistance > 0) {
                 setRemainingDistance(remainingRouteDistance);
               }
@@ -418,7 +465,7 @@ export default function DirectionsScreen() {
       locationSubscription.current.remove();
       locationSubscription.current = null;
     }
-    
+
     // Reset map view
     if (mapRef.current && location && temple.latitude && temple.longitude) {
       mapRef.current.animateCamera({
@@ -466,13 +513,13 @@ export default function DirectionsScreen() {
   // Get maneuver icon
   const getManeuverIcon = (maneuver?: string): string => {
     if (!maneuver) return 'navigate';
-    
+
     if (maneuver.includes('left')) return 'arrow-back';
     if (maneuver.includes('right')) return 'arrow-forward';
     if (maneuver.includes('straight')) return 'arrow-up';
     if (maneuver.includes('uturn')) return 'return-down-back';
     if (maneuver === 'arrive') return 'flag';
-    
+
     return 'navigate';
   };
   // Center map on user location
@@ -493,7 +540,8 @@ export default function DirectionsScreen() {
 
   // Recenter map to show both user and temple
   const recenterMap = () => {
-    if (mapRef.current && location && temple.latitude && temple.longitude) {
+    if (!mapRef.current || !temple.latitude || !temple.longitude) return;
+    if (location) {
       mapRef.current.fitToCoordinates(
         [
           { latitude: location.coords.latitude, longitude: location.coords.longitude },
@@ -504,28 +552,45 @@ export default function DirectionsScreen() {
           animated: true,
         }
       );
+    } else {
+      mapRef.current.animateToRegion({
+        latitude: temple.latitude,
+        longitude: temple.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      });
     }
+  };
+
+  // Toggle map view type
+  const toggleMapType = () => {
+    setMapType(mapType === 'standard' ? 'hybrid' : 'standard');
   };
 
   return (
     <View style={styles.container}>
       {/* Map View - Full Screen */}
-      {location && temple.latitude && temple.longitude && (
+      {temple.latitude && temple.longitude && (
         <View style={styles.fullMapContainer}>
           <MapView
             ref={mapRef}
             provider={PROVIDER_GOOGLE}
             style={styles.fullMap}
-            mapType="standard"
+            mapType={mapType}
             showsUserLocation={!isNavigating}
             showsMyLocationButton={false}
             showsCompass={false}
             showsTraffic={true}
-            initialRegion={{
+            initialRegion={location ? {
               latitude: (location.coords.latitude + temple.latitude) / 2,
               longitude: (location.coords.longitude + temple.longitude) / 2,
               latitudeDelta: Math.abs(location.coords.latitude - temple.latitude) * 2.5 || 0.05,
               longitudeDelta: Math.abs(location.coords.longitude - temple.longitude) * 2.5 || 0.05,
+            } : {
+              latitude: temple.latitude,
+              longitude: temple.longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
             }}
           >
             {/* Custom user location marker (when navigating) */}
@@ -541,13 +606,13 @@ export default function DirectionsScreen() {
                 rotation={heading}
               >
                 <View style={styles.userMarker}>
-                  <Ionicons name="navigate" size={20} color="#ffffff" />
+                  <Ionicons name="navigate" size={36} color="#ff0000ff" />
                 </View>
               </Marker>
             )}
-            
+
             {/* Static user location marker (when not navigating) */}
-            {!isNavigating && (
+            {!isNavigating && location && (
               <Marker
                 key="user-static"
                 coordinate={{
@@ -561,7 +626,7 @@ export default function DirectionsScreen() {
                 </View>
               </Marker>
             )}
-            
+
             {/* Temple marker */}
             <Marker
               key="temple"
@@ -576,7 +641,7 @@ export default function DirectionsScreen() {
                 <Ionicons name="location" size={40} color="#ff6b57" />
               </View>
             </Marker>
-            
+
             {/* Route line */}
             {routeCoordinates.length > 0 && (
               <Polyline
@@ -590,40 +655,37 @@ export default function DirectionsScreen() {
 
           {/* Floating Header */}
           <View style={styles.floatingHeader}>
-            <TouchableOpacity 
-              style={styles.floatingBackBtn} 
+            <TouchableOpacity
+              style={styles.floatingBackBtn}
               onPress={handleBackPress}
             >
               <Ionicons name="arrow-back" size={24} color="#2d2d2d" />
             </TouchableOpacity>
-            
+
             <View style={styles.headerInfo}>
               <ThemedText style={styles.floatingHeaderTitle} numberOfLines={1}>
                 {temple.name}
               </ThemedText>
-              {!isLoadingRoute && distance && distance > 0 && (
-                <ThemedText style={styles.floatingHeaderSubtitle}>
-                  {distance.toFixed(1)} km
-                </ThemedText>
-              )}
-              {isLoadingRoute && (
-                <ThemedText style={styles.floatingHeaderSubtitle}>
-                  Đang tính...
-                </ThemedText>
-              )}
             </View>
           </View>
 
           {/* Map Control Buttons */}
           <View style={styles.mapControlButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
+              style={styles.mapControlBtn}
+              onPress={toggleMapType}
+            >
+              <Ionicons name="layers" size={24} color={mapType !== 'standard' ? '#4285f4' : '#2d2d2d'} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.mapControlBtn}
               onPress={centerOnUser}
             >
               <Ionicons name="locate" size={24} color="#2d2d2d" />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.mapControlBtn}
               onPress={recenterMap}
             >
@@ -636,35 +698,32 @@ export default function DirectionsScreen() {
             <View style={styles.floatingNavigationCard}>
               <View style={styles.navCardHeader}>
                 <View style={styles.navManeuverIcon}>
-                  <Ionicons 
-                    name={getManeuverIcon(currentStep.maneuver) as any} 
-                    size={24} 
-                    color="#ffffff" 
+                  <Ionicons
+                    name={getManeuverIcon(currentStep.maneuver) as any}
+                    size={24}
+                    color="#ffffff"
                   />
                 </View>
                 <View style={styles.navCardInfo}>
                   <ThemedText style={styles.navInstruction} numberOfLines={2}>
                     {currentStep.instruction}
                   </ThemedText>
-                  <ThemedText style={styles.navDistance}>
-                    {currentStep.distance < 1000 
-                      ? `Sau ${Math.round(currentStep.distance)} m` 
-                      : `Sau ${(currentStep.distance / 1000).toFixed(1)} km`}
-                  </ThemedText>
                 </View>
               </View>
-              
+
               <View style={styles.navStatsRow}>
                 <View style={styles.navStat}>
-                  <Ionicons name="navigate-outline" size={16} color="#4285f4" />
+                  <Ionicons name="navigate-outline" size={16} color="#ffffffff" />
                   <ThemedText style={styles.navStatText}>
                     {remainingDistance ? `${remainingDistance.toFixed(1)} km` : '-'}
                   </ThemedText>
                 </View>
                 <View style={styles.navStatDivider} />
                 <View style={styles.navStat}>
-                  <Ionicons name="time-outline" size={16} color="#4285f4" />
-                  <ThemedText style={styles.navStatText}>{travelTime}</ThemedText>
+                  <Ionicons name="time-outline" size={16} color="#ffffffff" />
+                  <ThemedText style={styles.navStatText}>
+                    {isLoadingRoute ? 'Đang tính...' : travelTime}
+                  </ThemedText>
                 </View>
               </View>
             </View>
@@ -677,169 +736,147 @@ export default function DirectionsScreen() {
               <View style={styles.dragHandle} />
             </View>
 
-            <ScrollView 
+            <ScrollView
               style={styles.bottomScrollView}
               showsVerticalScrollIndicator={false}
             >
-                {!isNavigating ? (
-                  <>
-                    {/* Temple Quick Info */}
-                    <View style={styles.templeQuickInfo}>
-                      <Image
-                        source={temple.imageUrl ? 
-                          { uri: temple.imageUrl } : 
-                          getPagodaImage(temple.id || '', temple.name)
-                        }
-                        style={styles.templeQuickImage}
-                      />
-                      <View style={styles.templeQuickDetails}>
-                        <ThemedText style={styles.templeQuickName} numberOfLines={1}>
-                          {temple.name}
-                        </ThemedText>
-                        <View style={styles.templeQuickLocation}>
-                          <Ionicons name="location-outline" size={12} color="#666666" />
-                          <ThemedText style={styles.templeQuickLocationText} numberOfLines={1}>
-                            {temple.location}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </View>
+              {!isNavigating ? (
+                <>
+                  {/* Temple Quick Info */}
+                  <View style={styles.templeQuickInfo}>
+                    <Image
+                      source={temple.imageUrl ?
+                        { uri: temple.imageUrl } :
+                        getPagodaImage(temple.id || '', temple.name)
+                      }
+                      style={styles.templeQuickImage}
+                    />
+                  </View>
 
-                    {/* Travel Mode Selector */}
-                    <View style={styles.travelModeSelector}>
-                      <TouchableOpacity 
-                        style={[
-                          styles.travelModeBtn,
-                          selectedMode === 'motorbike' && styles.travelModeBtnActive
-                        ]}
-                        onPress={() => setSelectedMode('motorbike')}
-                      >
-                        <Ionicons 
-                          name="bicycle" 
-                          size={20} 
-                          color={selectedMode === 'motorbike' ? '#4285f4' : '#999999'} 
-                        />
-                        <ThemedText style={[
-                          styles.travelModeText,
-                          selectedMode === 'motorbike' && styles.travelModeTextActive
-                        ]}>
-                          Xe máy
-                        </ThemedText>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity 
-                        style={[
-                          styles.travelModeBtn,
-                          selectedMode === 'driving' && styles.travelModeBtnActive
-                        ]}
-                        onPress={() => setSelectedMode('driving')}
-                      >
-                        <Ionicons 
-                          name="car" 
-                          size={20} 
-                          color={selectedMode === 'driving' ? '#4285f4' : '#999999'} 
-                        />
-                        <ThemedText style={[
-                          styles.travelModeText,
-                          selectedMode === 'driving' && styles.travelModeTextActive
-                        ]}>
-                          Xe hơi
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Start Navigation Button */}
-                    <TouchableOpacity 
-                      style={styles.primaryActionBtn}
-                      onPress={startNavigation}
+                  {/* Travel Mode Selector */}
+                  <View style={styles.travelModeSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.travelModeBtn,
+                        selectedMode === 'motorbike' && styles.travelModeBtnActive
+                      ]}
+                      onPress={() => setSelectedMode('motorbike')}
                     >
-                      <Ionicons name="navigate" size={24} color="#ffffff" />
-                      <ThemedText style={styles.primaryActionText}>
-                        Bắt đầu dẫn đường
+                      <Ionicons
+                        name="bicycle"
+                        size={20}
+                        color={selectedMode === 'motorbike' ? '#4285f4' : '#999999'}
+                      />
+                      <ThemedText style={[
+                        styles.travelModeText,
+                        selectedMode === 'motorbike' && styles.travelModeTextActive
+                      ]}>
+                        Xe máy
                       </ThemedText>
                     </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    {/* Temple Quick Info - When Navigating */}
-                    <View style={styles.templeQuickInfo}>
-                      <Image
-                        source={temple.imageUrl ? 
-                          { uri: temple.imageUrl } : 
-                          getPagodaImage(temple.id || '', temple.name)
-                        }
-                        style={styles.templeQuickImage}
-                      />
-                      <View style={styles.templeQuickDetails}>
-                        <ThemedText style={styles.templeQuickName} numberOfLines={1}>
-                          {temple.name}
-                        </ThemedText>
-                        <View style={styles.templeQuickLocation}>
-                          <Ionicons name="location-outline" size={12} color="#666666" />
-                          <ThemedText style={styles.templeQuickLocationText} numberOfLines={1}>
-                            {temple.location}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </View>
 
-                    {/* Travel Mode Selector - When Navigating */}
-                    <View style={styles.travelModeSelector}>
-                      <TouchableOpacity 
-                        style={[
-                          styles.travelModeBtn,
-                          selectedMode === 'motorbike' && styles.travelModeBtnActive
-                        ]}
-                        onPress={() => setSelectedMode('motorbike')}
-                      >
-                        <Ionicons 
-                          name="bicycle" 
-                          size={20} 
-                          color={selectedMode === 'motorbike' ? '#4285f4' : '#999999'} 
-                        />
-                        <ThemedText style={[
-                          styles.travelModeText,
-                          selectedMode === 'motorbike' && styles.travelModeTextActive
-                        ]}>
-                          Xe máy
-                        </ThemedText>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity 
-                        style={[
-                          styles.travelModeBtn,
-                          selectedMode === 'driving' && styles.travelModeBtnActive
-                        ]}
-                        onPress={() => setSelectedMode('driving')}
-                      >
-                        <Ionicons 
-                          name="car" 
-                          size={20} 
-                          color={selectedMode === 'driving' ? '#4285f4' : '#999999'} 
-                        />
-                        <ThemedText style={[
-                          styles.travelModeText,
-                          selectedMode === 'driving' && styles.travelModeTextActive
-                        ]}>
-                          Xe hơi
-                        </ThemedText>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Stop Navigation Button */}
-                    <TouchableOpacity 
-                      style={styles.stopActionBtn}
-                      onPress={stopNavigation}
+                    <TouchableOpacity
+                      style={[
+                        styles.travelModeBtn,
+                        selectedMode === 'driving' && styles.travelModeBtnActive
+                      ]}
+                      onPress={() => setSelectedMode('driving')}
                     >
-                      <Ionicons name="stop-circle" size={24} color="#ffffff" />
-                      <ThemedText style={styles.stopActionText}>
-                        Dừng dẫn đường
+                      <Ionicons
+                        name="car"
+                        size={20}
+                        color={selectedMode === 'driving' ? '#4285f4' : '#999999'}
+                      />
+                      <ThemedText style={[
+                        styles.travelModeText,
+                        selectedMode === 'driving' && styles.travelModeTextActive
+                      ]}>
+                        Xe hơi
                       </ThemedText>
                     </TouchableOpacity>
-                  </>
-                )}
-              </ScrollView>
-            </View>
+                  </View>
+
+                  {/* Start Navigation Button */}
+                  <TouchableOpacity
+                    style={styles.primaryActionBtn}
+                    onPress={startNavigation}
+                  >
+                    <Ionicons name="navigate" size={24} color="#ffffff" />
+                    <ThemedText style={styles.primaryActionText}>
+                      Bắt đầu dẫn đường
+                    </ThemedText>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* Temple Quick Info - When Navigating */}
+                  <View style={styles.templeQuickInfo}>
+                    <Image
+                      source={temple.imageUrl ?
+                        { uri: temple.imageUrl } :
+                        getPagodaImage(temple.id || '', temple.name)
+                      }
+                      style={styles.templeQuickImage}
+                    />
+                  </View>
+
+                  {/* Travel Mode Selector - When Navigating */}
+                  <View style={styles.travelModeSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.travelModeBtn,
+                        selectedMode === 'motorbike' && styles.travelModeBtnActive
+                      ]}
+                      onPress={() => setSelectedMode('motorbike')}
+                    >
+                      <Ionicons
+                        name="bicycle"
+                        size={20}
+                        color={selectedMode === 'motorbike' ? '#4285f4' : '#999999'}
+                      />
+                      <ThemedText style={[
+                        styles.travelModeText,
+                        selectedMode === 'motorbike' && styles.travelModeTextActive
+                      ]}>
+                        Xe máy
+                      </ThemedText>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.travelModeBtn,
+                        selectedMode === 'driving' && styles.travelModeBtnActive
+                      ]}
+                      onPress={() => setSelectedMode('driving')}
+                    >
+                      <Ionicons
+                        name="car"
+                        size={20}
+                        color={selectedMode === 'driving' ? '#4285f4' : '#999999'}
+                      />
+                      <ThemedText style={[
+                        styles.travelModeText,
+                        selectedMode === 'driving' && styles.travelModeTextActive
+                      ]}>
+                        Xe hơi
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Stop Navigation Button */}
+                  <TouchableOpacity
+                    style={styles.stopActionBtn}
+                    onPress={stopNavigation}
+                  >
+                    <Ionicons name="stop-circle" size={24} color="#ffffff" />
+                    <ThemedText style={styles.stopActionText}>
+                      Dừng dẫn đường
+                    </ThemedText>
+                  </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
+          </View>
         </View>
       )}
     </View>
@@ -878,7 +915,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -916,12 +953,12 @@ const styles = StyleSheet.create({
   },
   floatingNavigationCard: {
     position: 'absolute',
-    top: 140,
+    top: 130,
     left: 16,
     right: 16,
     backgroundColor: '#4285f4',
-    borderRadius: 18,
-    padding: 20,
+    borderRadius: 16,
+    padding: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -931,36 +968,35 @@ const styles = StyleSheet.create({
   navCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   navManeuverIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
   navCardInfo: {
     flex: 1,
   },
   navInstruction: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 6,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   navDistance: {
-    fontSize: 15,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   navStatsRow: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 10,
+    padding: 10,
     alignItems: 'center',
   },
   navStat: {
@@ -985,7 +1021,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    minHeight: 280,
+    minHeight: 220,
     maxHeight: height * 0.6,
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
@@ -995,7 +1031,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 10,
-    paddingBottom: 30,
+    paddingBottom: 50,
   },
   dragHandleContainer: {
     paddingVertical: 8,
@@ -1008,20 +1044,18 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   bottomScrollView: {
-    flex: 1,
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingBottom: 30,
   },
   templeQuickInfo: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
   templeQuickImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    marginRight: 12,
+    width: 80,
+    height: 80,
+    borderRadius: 16,
   },
   templeQuickDetails: {
     flex: 1,
@@ -1113,14 +1147,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   userMarker: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#4285f4',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#ffffff',
+    padding: 4, // Padding nhẹ để xoay (rotation) không bị mất viền
   },
   staticUserMarker: {
     width: 36,
