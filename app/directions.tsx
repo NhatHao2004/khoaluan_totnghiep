@@ -373,6 +373,17 @@ export default function DirectionsScreen() {
   // Start real-time navigation
   const startNavigation = async () => {
     try {
+      // Check if location services are enabled
+      const isEnabled = await Location.hasServicesEnabledAsync();
+      if (!isEnabled) {
+        Alert.alert(
+          'Dịch vụ vị trí đã tắt',
+          'Vui lòng bật GPS trên thiết bị của bạn. Để sử dụng chức năng dẫn đường.',
+          [{ text: 'Đóng' }]
+        );
+        return;
+      }
+
       // Request location permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -452,9 +463,18 @@ export default function DirectionsScreen() {
           }
         }
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starting navigation:', error);
-      Alert.alert('Lỗi', 'Không thể bắt đầu dẫn đường');
+
+      if (error.message?.includes('unsatisfied device settings')) {
+        Alert.alert(
+          'Cài đặt thiết bị chưa phù hợp',
+          'Vui lòng bật GPS ở chế độ "Độ chính xác cao" để sử dụng dẫn đường.'
+        );
+      } else {
+        Alert.alert('Lỗi', 'Không thể bắt đầu dẫn đường. Vui lòng kiểm tra lại GPS.');
+      }
+      setIsNavigating(false);
     }
   };
 
