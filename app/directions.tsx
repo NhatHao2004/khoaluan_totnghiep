@@ -179,7 +179,8 @@ export default function DirectionsScreen() {
     // Get the source page from params to navigate back correctly
     const source = params.source as string;
 
-    if (source === 'pagoda-detail') {
+    // Ưu tiên quay về Chi tiết chùa nếu có thông tin chùa
+    if (temple.id) {
       router.push({
         pathname: '/pagoda-detail',
         params: {
@@ -193,6 +194,7 @@ export default function DirectionsScreen() {
           isFavorite: params.isFavorite,
           latitude: temple.latitude?.toString(),
           longitude: temple.longitude?.toString(),
+          source: source === 'pagoda-detail' ? '' : source,
         }
       });
     } else if (source === 'explore') {

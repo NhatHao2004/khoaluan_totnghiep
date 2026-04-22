@@ -241,6 +241,7 @@ export default function PagodaScreen() {
                       JSON.stringify(pagoda.detailedDescription) : undefined,
                     additionalImages: pagoda.additionalImages ? 
                       JSON.stringify(pagoda.additionalImages) : undefined,
+                    source: 'pagoda',
                   }
                 })}
               >

@@ -166,7 +166,15 @@ export default function PagodaDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => router.push('/pagoda')}
+          onPress={() => {
+            if (params.source === 'explore') {
+              router.push('/explore');
+            } else if (params.source === 'pagoda') {
+              router.push('/pagoda');
+            } else {
+              router.back();
+            }
+          }}
         >
           <Ionicons name="arrow-back" size={24} color="#000000" />
         </TouchableOpacity>
@@ -208,6 +216,12 @@ export default function PagodaDetailScreen() {
         <View style={styles.pagodaInfo}>
           <View style={styles.pagodaInfoLeft}>
             <ThemedText style={styles.pagodaInfoTitle}>{temple.name}</ThemedText>
+            {temple.category === 'ancient' && temple.location && (
+              <View style={styles.pagodaInfoLocation}>
+                <Ionicons name="location-outline" size={14} color="#9e9e9e" />
+                <ThemedText style={styles.locationText}>{temple.location}</ThemedText>
+              </View>
+            )}
           </View>
         </View>
 
@@ -232,7 +246,7 @@ export default function PagodaDetailScreen() {
                     category: temple.category,
                     latitude: temple.latitude?.toString(),
                     longitude: temple.longitude?.toString(),
-                    source: 'pagoda-detail',
+                    source: params.source || 'pagoda-detail',
                     isFavorite: temple.isFavorite?.toString(),
                   }
                 });
@@ -242,9 +256,15 @@ export default function PagodaDetailScreen() {
               <ThemedText style={styles.actionBtnText}>Chỉ đường</ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnSecondary]}>
+            <TouchableOpacity 
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={() => {
+                // Logic for Quiz/Challenge
+                router.push('/quiz');
+              }}
+            >
               <Ionicons name="help-circle" size={16} color="#ffffff" />
-              <ThemedText style={styles.actionBtnText}>Quiz</ThemedText>
+              <ThemedText style={styles.actionBtnText}>Thử thách</ThemedText>
             </TouchableOpacity>
           </View>
         </View>

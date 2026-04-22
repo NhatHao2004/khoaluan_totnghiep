@@ -2,14 +2,17 @@ import { ThemedText } from '@/components/themed-text';
 import { useLocation } from '@/hooks/use-location';
 import { useTemples } from '@/hooks/use-temples';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { DiscoveryItem, getDiscoveryItems } from '@/services/discovery-service';
 import { getNearbyTemples, Temple } from '@/services/firebase-service';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
-  Image,
-  ScrollView,
+  ImageBackground,
+  StatusBar,
   StyleSheet,
   TouchableOpacity,
   View
@@ -17,112 +20,89 @@ import {
 
 const { width } = Dimensions.get('window');
 
-// Local images for pagodas
-const PAGODA_IMAGES = {
-  'chua-ang': require('@/assets/images/chuaang1.jpg'),
-  'chua-hang': require('@/assets/images/chuahang.jpg'),
-  'chua-sleng-cu': require('@/assets/images/chuaslengcu.jpg'),
-  'default': require('@/assets/images/chua1.jpg'),
-};
-
-const getPagodaImage = (templeId: string, templeName: string) => {
-  if (PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES]) {
-    return PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES];
-  }
-  
-  const nameKey = templeName.toLowerCase()
-    .replace(/chùa\s*/g, 'chua-')
-    .replace(/\s+/g, '-')
-    .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
-    .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
-    .replace(/[ìíịỉĩ]/g, 'i')
-    .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
-    .replace(/[ùúụủũưừứựửữ]/g, 'u')
-    .replace(/[ỳýỵỷỹ]/g, 'y')
-    .replace(/đ/g, 'd');
-    
-  if (PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES]) {
-    return PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES];
-  }
-  
-  return PAGODA_IMAGES.default;
-};
+// Premium Discovery Categories
+const DISCOVERY_CATEGORIES = [
+  { id: 'ancient', title: 'Chùa Khmer', image: require('@/assets/images/chuaang1.jpg') },
+  { id: 'peaceful', title: 'Văn hóa', image: require('@/assets/images/chuaslengcu.jpg') },
+  { id: 'festival', title: 'Ẩm thực', image: require('@/assets/images/chua1.jpg') },
+  { id: 'culture', title: 'Học tiếng Khmer', image: require('@/assets/images/vanhoa.jpg') },
+  { id: 'cuisine', title: 'Thử thách', image: require('@/assets/images/amthuc.jpg') },
+  { id: 'education', title: 'Trò chơi', image: require('@/assets/images/hoctap.jpg') },
+];
 
 export default function ExploreScreen() {
   const router = useRouter();
   const tintColor = useThemeColor({}, 'tint');
   const { temples, loading: templesLoading } = useTemples();
   const { location, loading: locationLoading } = useLocation();
-  
-  const [nearbyTemples, setNearbyTemples] = useState<(Temple & { distance: number })[]>([]);
-  const [allTemples, setAllTemples] = useState<Temple[]>([]);
-  const [loadingNearby, setLoadingNearby] = useState(false);
 
-  // Load nearby temples when location is available
+  const [nearbyTemples, setNearbyTemples] = useState<(Temple & { distance: number })[]>([]);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [discoveryResults, setDiscoveryResults] = useState<any[]>([]);
+  const [scanCategory, setScanCategory] = useState<string | null>(null);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const radarScale = useRef(new Animated.Value(1)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }).start();
+
+      startRadarAnimation();
+    }, [temples])
+  );
+
+  const startRadarAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(radarScale, {
+          toValue: 1.2,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(radarScale, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
+
   useEffect(() => {
     if (location) {
-      // Delay để không block UI
-      const timer = setTimeout(() => {
-        loadNearbyTemples();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-    if (temples) {
-      // Sort temples alphabetically by name (A-Z)
-      const sortedTemples = [...temples].sort((a, b) => {
-        const nameA = normalizeText(a.name);
-        const nameB = normalizeText(b.name);
-        return nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' });
-      });
-      setAllTemples(sortedTemples);
+      loadNearbyTemples();
     }
   }, [location, temples]);
 
-  const normalizeText = (text: string) => {
-    return text.toLowerCase()
-      .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
-      .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
-      .replace(/[ìíịỉĩ]/g, 'i')
-      .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
-      .replace(/[ùúụủũưừứựửữ]/g, 'u')
-      .replace(/[ỳýỵỷỹ]/g, 'y')
-      .replace(/đ/g, 'd');
-  };
-
   const loadNearbyTemples = async () => {
     if (!location) return;
-
     try {
       setLoadingNearby(true);
       const nearby = await getNearbyTemples(
         location.coords.latitude,
         location.coords.longitude,
-        50 // Giảm từ 100km xuống 50km để nhanh hơn
+        50 // Discovery radar: 50km
       );
-      
-      // Cập nhật khoảng cách đường đi thực tế từ OSRM API
-      const templesWithRealDistance = await Promise.all(
-        nearby.map(async (temple) => {
-          try {
-            const url = `https://router.project-osrm.org/route/v1/car/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=false`;
-            const response = await fetch(url);
-            const data = await response.json();
-            
-            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-              const realDistance = data.routes[0].distance / 1000; // Convert to km
-              return { ...temple, distance: realDistance };
-            }
-            return temple; // Fallback to straight line distance
-          } catch (error) {
-            console.error('Error fetching route for temple:', temple.name, error);
-            return temple; // Fallback to straight line distance
-          }
-        })
-      );
-      
-      // Sắp xếp lại theo khoảng cách thực tế
-      templesWithRealDistance.sort((a, b) => a.distance - b.distance);
-      setNearbyTemples(templesWithRealDistance);
+
+      const templesWithDistance = nearby.map(temple => {
+        const dist = calculateDistance(
+          location.coords.latitude,
+          location.coords.longitude,
+          temple.latitude || 0,
+          temple.longitude || 0
+        );
+        return { ...temple, distance: dist };
+      });
+
+      templesWithDistance.sort((a, b) => a.distance - b.distance);
+      setNearbyTemples(templesWithDistance);
     } catch (error) {
       console.error('Error loading nearby temples:', error);
     } finally {
@@ -130,14 +110,25 @@ export default function ExploreScreen() {
     }
   };
 
-  const navigateToDirections = (temple: Temple) => {
+  // Haversine fallback for immediate distance check
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const navigateToDetail = (temple: Temple) => {
     router.push({
-      pathname: '/directions',
+      pathname: '/pagoda-detail',
       params: {
         id: temple.id,
         name: temple.name,
-        location: temple.location || temple.rental,
-        rental: temple.rental,
+        location: temple.location,
         description: temple.description,
         imageUrl: temple.imageUrl,
         category: temple.category,
@@ -148,141 +139,178 @@ export default function ExploreScreen() {
     });
   };
 
-  const navigateToDetail = (temple: Temple) => {
+  const navigateToDiscoveryDetail = (item: DiscoveryItem) => {
     router.push({
       pathname: '/pagoda-detail',
       params: {
-        id: temple.id,
-        name: temple.name,
-        location: temple.location,
-        rental: temple.rental,
-        description: temple.description,
-        imageUrl: temple.imageUrl,
-        category: temple.category,
-        isFavorite: temple.isFavorite?.toString(),
-        latitude: temple.latitude?.toString(),
-        longitude: temple.longitude?.toString(),
+        id: item.id,
+        name: item.title,
+        description: item.description,
+        imageUrl: item.imageUrl,
+        category: item.category,
+        source: 'explore',
       }
     });
   };
 
+  const handleCategoryDiscovery = async (catId: string) => {
+    if (isScanning) return;
+
+    setIsScanning(true);
+    setScanCategory(catId);
+    setDiscoveryResults([]);
+
+    // Smooth Haptic feedback for starting scan
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Simulate Radar scan duration (1.5s)
+    setTimeout(() => {
+      let results: any[] = [];
+      if (catId === 'ancient') {
+        if (nearbyTemples.length > 0) {
+          results = [...nearbyTemples].sort(() => 0.5 - Math.random()).slice(0, 5);
+        } else if (temples && temples.length > 0) {
+          results = [...temples].sort(() => 0.5 - Math.random()).slice(0, 5);
+        }
+      } else {
+        const categoryMap: Record<string, string> = {
+          'ancient': 'culture',
+          'peaceful': 'culture',
+          'festival': 'cuisine',
+          'culture': 'education',
+          'cuisine': 'challenges',
+          'education': 'games'
+        };
+        const serviceKey = categoryMap[catId] || 'culture';
+        results = getDiscoveryItems(serviceKey, 5);
+      }
+
+      setDiscoveryResults(results);
+      setIsScanning(false);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }, 1500);
+  };
+
+  const handleRadarRandom = () => {
+    if ((discoveryResults.length === 0 && nearbyTemples.length === 0) || isScanning) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const itemsToPickFrom = discoveryResults.length > 0 ? discoveryResults : nearbyTemples;
+    if (itemsToPickFrom.length === 0) return;
+
+    const randomIndex = Math.floor(Math.random() * itemsToPickFrom.length);
+    const item = itemsToPickFrom[randomIndex];
+    
+    if (item.category === 'ancient') {
+      navigateToDetail(item);
+    } else {
+      navigateToDiscoveryDetail(item);
+    }
+  };
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
       {/* Header */}
-      <View style={styles.header}>
+      <View style={styles.quizHeader}>
         <ThemedText style={styles.headerTitle}>Khám phá</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>Tìm hiểu các ngôi chùa Khmer</ThemedText>
+        <ThemedText style={styles.headerSubtitle}>Hành trình khám phá di sản văn hóa Khmer</ThemedText>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Nearby Temples Section */}
-        {location && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionTitle}>Địa điểm gần bạn</ThemedText>
-            </View>
-
-            {locationLoading || loadingNearby ? (
-              <View style={styles.loadingNearby}>
-                <ActivityIndicator size="small" color={tintColor} />
-                <ThemedText style={styles.loadingText}>Đang tìm các ngôi chùa gần bạn...</ThemedText>
-              </View>
-            ) : nearbyTemples.length === 0 ? (
-              <ThemedText style={styles.emptyText}>
-                Không tìm thấy chùa nào gần bạn
+      <View style={styles.content}>
+        {/* Radar Section */}
+        <Animated.View style={[styles.radarSection, { opacity: fadeAnim }]}>
+          <View style={styles.radarHeader}>
+            <View>
+              <ThemedText style={styles.sectionTitle}>Radar khám phá</ThemedText>
+              <ThemedText style={styles.sectionSubtitle}>
+                {isScanning
+                  ? 'Đang quét dữ liệu...'
+                  : (scanCategory === 'ancient' || !scanCategory)
+                    ? 'Tìm kiếm các ngôi chùa Khmer trong 50km'
+                    : scanCategory === 'peaceful'
+                      ? 'Khám phá nét đẹp văn hóa truyền thống'
+                      : scanCategory === 'festival'
+                        ? 'Tìm kiếm hương vị ẩm thực đặc sắc'
+                        : scanCategory === 'culture'
+                          ? 'Học ngôn ngữ và chữ viết Khmer'
+                          : scanCategory === 'cuisine'
+                            ? 'Thử thách kiến thức và kỹ năng'
+                            : 'Giải trí với các trò chơi dân gian'}
               </ThemedText>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                {nearbyTemples.slice(0, 3).map((temple) => (
-                  <TouchableOpacity 
-                    key={temple.id} 
-                    style={styles.nearbyCard}
-                    onPress={() => navigateToDirections(temple)}
-                  >
-                    <Image
-                      source={temple.imageUrl ? 
-                        { uri: `${temple.imageUrl}?t=${Date.now()}`, cache: 'reload' } : 
-                        getPagodaImage(temple.id || '', temple.name)
-                      }
-                      style={styles.nearbyCardImage}
-                      resizeMode="cover"
-                    />
-                    
-                    <View style={styles.nearbyCardContent}>
-                      <View style={styles.nearbyCardRow}>
-                        <ThemedText style={styles.nearbyCardTitle} numberOfLines={1}>
-                          {temple.name}
-                        </ThemedText>
-                        <ThemedText style={styles.nearbyCardDistance}>
-                          📍 {temple.distance.toFixed(1)} km
-                        </ThemedText>
-                      </View>
-                    </View>
-                    
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        )}
-
-        {/* All Temples Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>Tất cả ngôi chùa Khmer</ThemedText>
-          </View>
-
-          {templesLoading ? (
-            <ActivityIndicator size="large" color={tintColor} style={styles.loader} />
-          ) : allTemples.length === 0 ? (
-            <ThemedText style={styles.emptyText}>
-              Chưa có dữ liệu chùa Khmer
-            </ThemedText>
-          ) : (
-            <View style={styles.templeGrid}>
-              {allTemples.map((temple) => (
-                <TouchableOpacity 
-                  key={temple.id} 
-                  style={styles.templeCard}
-                  onPress={() => navigateToDirections(temple)}
-                >
-                  <Image
-                    source={temple.imageUrl ? 
-                      { uri: `${temple.imageUrl}?t=${Date.now()}`, cache: 'reload' } : 
-                      getPagodaImage(temple.id || '', temple.name)
-                    }
-                    style={styles.templeCardImage}
-                    resizeMode="cover"
-                  />
-                  
-                  <View style={styles.templeCardContent}>
-                    <ThemedText style={styles.templeCardTitle} numberOfLines={2}>
-                      {temple.name}
-                    </ThemedText>
-                    <ThemedText style={styles.templeCardLocation} numberOfLines={1}>
-                      {temple.location}
-                    </ThemedText>
-                  </View>
-                  
-                  <TouchableOpacity 
-                    style={styles.templeDirectionBtn}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      navigateToDirections(temple);
-                    }}
-                  >
-                    <ThemedText style={styles.directionIcon}>→</ThemedText>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
             </View>
-          )}
+          </View>
+
+          <View style={styles.radarContainer}>
+            <Animated.View style={[styles.radarRing, { transform: [{ scale: radarScale }] }]} />
+            <TouchableOpacity
+              style={[
+                styles.radarCenter,
+                isScanning && { borderColor: '#ff6b57', borderWidth: 3, shadowColor: '#ff6b57' }
+              ]}
+              onPress={handleRadarRandom}
+              activeOpacity={0.7}
+              disabled={isScanning}
+            >
+              {loadingNearby || isScanning ? (
+                <ActivityIndicator color="#ff6b57" />
+              ) : (
+                <View style={styles.radarContent}>
+                  {scanCategory ? (
+                    <>
+                      <ThemedText style={styles.radarNumber}>
+                        {discoveryResults.length > 0
+                          ? discoveryResults.length
+                          : nearbyTemples.length > 0
+                            ? nearbyTemples.length
+                            : 0}
+                      </ThemedText>
+                      <ThemedText style={styles.radarText}>
+                        {discoveryResults.length > 0 ? 'KẾT QUẢ' : 'ĐIỂM ĐẾN'}
+                      </ThemedText>
+                    </>
+                  ) : (
+                    <ThemedText style={[styles.radarNumber, { color: '#ddd', fontSize: 40 }]}>?</ThemedText>
+                  )}
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* Thematic Collections - Discovery Grid */}
+        <View style={styles.collectionsSection}>
+          <ThemedText style={styles.sectionTitle}>Khám phá theo danh mục</ThemedText>
+          <View style={styles.orbGrid}>
+            {DISCOVERY_CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.orbItem,
+                  scanCategory === cat.id && { transform: [{ scale: 1.1 }] }
+                ]}
+                onPress={() => handleCategoryDiscovery(cat.id)}
+                activeOpacity={0.8}
+              >
+                <View style={[
+                  styles.orbImageContainer,
+                  scanCategory === cat.id && { borderColor: '#ff6b57', borderWidth: 2 }
+                ]}>
+                  <ImageBackground source={cat.image} style={styles.orbImage} imageStyle={{ borderRadius: 52.5 }}>
+                    <View style={styles.orbOverlay} />
+                  </ImageBackground>
+                </View>
+                <ThemedText style={[
+                  styles.orbTitle,
+                  scanCategory === cat.id && { color: '#ff6b57', fontWeight: '800' }
+                ]} numberOfLines={1}>{cat.title}</ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -290,9 +318,9 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F8F9FA',
   },
-  header: {
+  quizHeader: {
     backgroundColor: '#ffffff',
     paddingTop: 50,
     paddingBottom: 20,
@@ -302,6 +330,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 5,
+    zIndex: 10,
   },
   headerTitle: {
     fontSize: 28,
@@ -317,141 +346,124 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 40,
   },
-  scrollContent: {
-    paddingBottom: 55,
-  },
-  section: {
-    backgroundColor: '#ffffff',
-    margin: 15,
-    borderRadius: 15,
-    padding: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
+  radarSection: {
+    paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+    marginBottom: 20,
+  },
+  radarHeader: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#2d2d2d',
+    textAlign: 'center',
+    lineHeight: 28,
   },
-  horizontalScroll: {
-    marginHorizontal: -10,
-  },
-  nearbyCard: {
-    width: 200,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    marginHorizontal: 10,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  nearbyCardImage: {
-    width: '100%',
-    height: 120,
-    resizeMode: 'cover',
-  },
-  nearbyCardContent: {
-    padding: 12,
-  },
-  nearbyCardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  nearbyCardTitle: {
-    fontSize: 14,
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#999',
+    marginTop: 2,
     fontWeight: '600',
-    color: '#2d2d2d',
-    flex: 1,
+    textAlign: 'center',
   },
-  nearbyCardDistance: {
-    fontSize: 12,
-    color: '#ff6b57',
-    fontWeight: '500',
-  },
-  nearbyDirectionBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 15,
+  radarContainer: {
+    width: width * 0.50,
+    height: width * 0.50,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  templeGrid: {
-    gap: 15,
+  radarRing: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: (width * 0.50) / 2,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 107, 87, 0.2)',
+    backgroundColor: 'rgba(255, 107, 87, 0.05)',
   },
-  templeCard: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    position: 'relative',
-  },
-  templeCardImage: {
+  radarCenter: {
     width: 100,
     height: 100,
-    resizeMode: 'cover',
-    borderRadius: 12,
-  },
-  templeCardContent: {
-    flex: 1,
-    padding: 15,
+    borderRadius: 50,
+    backgroundColor: '#fff',
     justifyContent: 'center',
-  },
-  templeCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2d2d2d',
-    marginBottom: 5,
-  },
-  templeCardLocation: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  templeDirectionBtn: {
-    position: 'absolute',
-    bottom: 15,
-    right: 15,
-    width: 35,
-    height: 35,
-    borderRadius: 10,
-    backgroundColor: 'white',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e9ecef',
-    justifyContent: 'center',
+    borderColor: '#ff6b57',
+    shadowColor: '#ff6b57',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  radarContent: {
     alignItems: 'center',
   },
-  directionIcon: {
-    fontSize: 16,
+  radarNumber: {
+    fontSize: 28,
+    fontWeight: '900',
     color: '#ff6b57',
+    lineHeight: 36,
   },
-  loader: {
-    marginVertical: 20,
+  radarText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#999',
+    letterSpacing: 2,
+    marginTop: -4,
   },
-  loadingNearby: {
+  collectionsSection: {
+    paddingHorizontal: 20,
+  },
+  orbGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     justifyContent: 'center',
-    padding: 20,
-    gap: 10,
+    marginTop: 15,
+    marginHorizontal: -10,
   },
-  loadingText: {
-    fontSize: 14,
-    color: '#666666',
+  orbItem: {
+    alignItems: 'center',
+    width: '31%',
+    marginBottom: 25,
+    marginHorizontal: '1%',
   },
-  emptyText: {
+  orbImageContainer: {
+    width: 105,
+    height: 105,
+    borderRadius: 52.5,
+    borderWidth: 1.5,
+    borderColor: '#ff6b57',
+    padding: 2,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+    shadowColor: '#ff6b57',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  orbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  orbOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 52.5,
+  },
+  orbTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#333',
     textAlign: 'center',
-    color: '#666666',
-    fontSize: 14,
-    fontStyle: 'italic',
-    paddingVertical: 20,
   },
 });

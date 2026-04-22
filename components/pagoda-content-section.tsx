@@ -11,29 +11,6 @@ const PAGODA_IMAGES = {
   'default': require('@/assets/images/chua1.jpg'),
 };
 
-const getPagodaImage = (templeId: string, templeName: string) => {
-  if (PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES]) {
-    return PAGODA_IMAGES[templeId as keyof typeof PAGODA_IMAGES];
-  }
-  
-  const nameKey = templeName.toLowerCase()
-    .replace(/chùa\s*/g, 'chua-')
-    .replace(/\s+/g, '-')
-    .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
-    .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
-    .replace(/[ìíịỉĩ]/g, 'i')
-    .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
-    .replace(/[ùúụủũưừứựửữ]/g, 'u')
-    .replace(/[ỳýỵỷỹ]/g, 'y')
-    .replace(/đ/g, 'd');
-    
-  if (PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES]) {
-    return PAGODA_IMAGES[nameKey as keyof typeof PAGODA_IMAGES];
-  }
-  
-  return PAGODA_IMAGES.default;
-};
-
 interface PagodaContentSectionProps {
   temple: Temple;
 }
@@ -48,33 +25,29 @@ export default function PagodaContentSection({ temple }: PagodaContentSectionPro
   const contentConfig = getContentConfig();
   
   // Use Firebase data first, then fallback to config or default
+  // IMPORTANT: Only fallback to DEFAULT_PAGODA_CONTENT for temples (category 'ancient')
   const detailedDescription = temple.detailedDescription ||
-                             contentConfig?.detailedDescription || 
-                             DEFAULT_PAGODA_CONTENT.detailedDescription;
-                             
+                              contentConfig?.detailedDescription || 
+                              (temple.category === 'ancient' ? DEFAULT_PAGODA_CONTENT.detailedDescription : []);
+                              
   const additionalImages = temple.additionalImages || 
-                          contentConfig?.additionalImages || 
-                          [];
+                           contentConfig?.additionalImages || 
+                           [];
 
   return (
     <View style={styles.contentSection}>
       {/* Render detailed descriptions with images in correct order */}
-      {detailedDescription && detailedDescription.length > 0 ? (
+      {(detailedDescription && detailedDescription.length > 0) ? (
         detailedDescription.map((desc, index) => (
           <View key={index}>
             {/* Description first */}
             <ThemedText style={styles.descriptionText}>{desc}</ThemedText>
             
-            {/* Show image AFTER description (skip first image as it's in hero) */}
+            {/* Show image AFTER description (limited to 2 images) */}
             {index === 0 && additionalImages && additionalImages.length > 0 && (
               <View style={styles.contentImage}>
                 <Image
-                  source={additionalImages[0]?.startsWith('local://') ? 
-                    PAGODA_IMAGES[additionalImages[0].replace('local://', '') as keyof typeof PAGODA_IMAGES] || PAGODA_IMAGES['chua-hang'] :
-                    additionalImages[0] ? 
-                      { uri: additionalImages[0] } : 
-                      PAGODA_IMAGES['chua-hang']
-                  }
+                  source={{ uri: additionalImages[0] }}
                   style={styles.contentImageStyle}
                   resizeMode="cover"
                 />
@@ -85,12 +58,7 @@ export default function PagodaContentSection({ temple }: PagodaContentSectionPro
             {index === 1 && additionalImages && additionalImages.length > 1 && (
               <View style={styles.contentImage}>
                 <Image
-                  source={additionalImages[1]?.startsWith('local://') ? 
-                    PAGODA_IMAGES[additionalImages[1].replace('local://', '') as keyof typeof PAGODA_IMAGES] || PAGODA_IMAGES['chua-sleng-cu'] :
-                    additionalImages[1] ? 
-                      { uri: additionalImages[1] } : 
-                      PAGODA_IMAGES['chua-sleng-cu']
-                  }
+                  source={{ uri: additionalImages[1] }}
                   style={styles.contentImageStyle}
                   resizeMode="cover"
                 />
@@ -100,36 +68,28 @@ export default function PagodaContentSection({ temple }: PagodaContentSectionPro
           </View>
         ))
       ) : (
-        // Fallback content if no detailed description
-        <>
+        // Generic Fallback if no detailed description array exists
+        <View>
           <ThemedText style={styles.descriptionText}>
-            {temple.description || DEFAULT_PAGODA_CONTENT.detailedDescription[0]}
+            {temple.description || "Nội dung đang được cập nhật..."}
           </ThemedText>
-
-          <View style={styles.contentImage}>
-            <Image
-              source={PAGODA_IMAGES['chua-hang']}
-              style={styles.contentImageStyle}
-            />
-            <ThemedText style={styles.imageCaption}>Nguồn: KhmerGo</ThemedText>
-          </View>
-
-          <ThemedText style={styles.descriptionText}>
-            {DEFAULT_PAGODA_CONTENT.detailedDescription[1]}
-          </ThemedText>
-
-          <View style={styles.contentImage}>
-            <Image
-              source={PAGODA_IMAGES['chua-sleng-cu']}
-              style={styles.contentImageStyle}
-            />
-            <ThemedText style={styles.imageCaption}>Nguồn: KhmerGo</ThemedText>
-          </View>
-
-          <ThemedText style={styles.descriptionText}>
-            {DEFAULT_PAGODA_CONTENT.detailedDescription[2]}
-          </ThemedText>
-        </>
+          
+          {/* If it's a temple, show some placeholder content as we used to */}
+          {temple.category === 'ancient' && (
+            <>
+              <View style={styles.contentImage}>
+                <Image
+                  source={PAGODA_IMAGES['chua-hang']}
+                  style={styles.contentImageStyle}
+                />
+                <ThemedText style={styles.imageCaption}>Nguồn: KhmerGo</ThemedText>
+              </View>
+              <ThemedText style={styles.descriptionText}>
+                {DEFAULT_PAGODA_CONTENT.detailedDescription[1]}
+              </ThemedText>
+            </>
+          )}
+        </View>
       )}  
     </View>
   );
@@ -146,24 +106,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 27,
     color: '#555555',
-    marginBottom: 5,
+    marginBottom: 15,
     textAlign: 'justify',
   },
   contentImage: {
     width: '100%',
-    marginBottom: 8,
+    marginBottom: 15,
     alignItems: 'center',
   },
   contentImageStyle: {
-    width: '80%',
-    height: 180,
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
     resizeMode: 'cover',
   },
   imageCaption: {
     fontSize: 12,
     color: '#9e9e9e',
     fontStyle: 'italic',
-    marginTop: 0,
+    marginTop: 5,
     alignSelf: 'flex-end',
   },
 });
