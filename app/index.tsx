@@ -53,6 +53,9 @@ export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
 
+  // Animation cho logo
+  const [logoAnim] = useState(new Animated.Value(0));
+
   // Fetch data from Firebase
   const { temples, loading: templesLoading, error: templesError, refresh: refreshTemples } = useTemples();
 
@@ -63,9 +66,6 @@ export default function HomeScreen() {
   const [nearbyTemples, setNearbyTemples] = useState<(Temple & { distance: number, isCalculatingDistance?: boolean })[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
-
-  // Animation for logo
-  const [logoAnim] = useState(new Animated.Value(0));
 
   // Load nearby temples when location is available
   useEffect(() => {
@@ -179,7 +179,7 @@ export default function HomeScreen() {
       loadNearbyTemples(); // Gọi ngầm, không await để không chờ
     }
     // Force re-render để cập nhật UI
-    setForceUpdate(prev => prev + 1);
+    setForceUpdate((prev: number) => prev + 1);
   };
 
   return (

@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   radarCenter: {
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: 20, // Chuyển từ tròn sang vuông bo góc
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -448,12 +448,13 @@ const styles = StyleSheet.create({
   orbImageContainer: {
     width: 105,
     height: 105,
-    borderRadius: 52.5,
+    borderRadius: 16, // Hình vuông bo góc
     borderWidth: 1.5,
     borderColor: '#ff6b57',
     padding: 2,
     marginBottom: 8,
     backgroundColor: '#fff',
+    overflow: 'hidden', // Đảm bảo hình ảnh không chờm ra ngoài
     shadowColor: '#ff6b57',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -463,11 +464,12 @@ const styles = StyleSheet.create({
   orbImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 14, // Nhỏ hơn container một chút
   },
   orbOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 52.5,
+    borderRadius: 16,
   },
   orbTitle: {
     fontSize: 12,

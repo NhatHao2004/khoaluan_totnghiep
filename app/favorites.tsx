@@ -337,12 +337,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2d2d2d',
     marginBottom: 5,
-    lineHeight: 36,
-    includeFontPadding: true,
+    lineHeight: 38,
+    includeFontPadding: false,
   },
   headerSubtitle: {
     fontSize: 16,
     color: '#666666',
+    includeFontPadding: false,
+    lineHeight: 22,
   },
   // Content Styles
   content: {

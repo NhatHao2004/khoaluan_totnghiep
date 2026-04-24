@@ -262,6 +262,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#2d3436',
+    includeFontPadding: false,
+    paddingVertical: 0,
   },
   loginBtn: {
     backgroundColor: '#ff6b57',
@@ -281,8 +283,10 @@ const styles = StyleSheet.create({
   },
   loginBtnText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 18, // Slightly larger
     fontWeight: '700',
+    includeFontPadding: false,
+    lineHeight: 24,
   },
   footer: {
     flexDirection: 'row',
@@ -292,10 +296,14 @@ const styles = StyleSheet.create({
   footerText: {
     color: '#636e72',
     fontSize: 14,
+    includeFontPadding: false,
+    lineHeight: 20,
   },
   registerLink: {
     color: '#ff6b57',
     fontSize: 14,
     fontWeight: '700',
+    includeFontPadding: false,
+    lineHeight: 20,
   },
 });

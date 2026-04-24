@@ -8,6 +8,8 @@ import { HapticTab } from '@/components/haptic-tab';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { LoadingScreen } from '@/components/loading-screen';
+import { useState, useEffect } from 'react';
 
 // Prevent native splash screen from auto-hiding
 
@@ -20,6 +22,19 @@ const COLORS = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  useEffect(() => {
+    // Hiển thị màn hình chào trong 3 giây ở cấp độ gốc (Root)
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isInitialLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <AuthProvider>

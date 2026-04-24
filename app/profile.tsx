@@ -268,7 +268,7 @@ export default function ProfileScreen() {
             style={styles.menuItem}
             onPress={() => handleMenuPress('edit-profile')}
           >
-            <View style={[styles.menuIcon, { backgroundColor: '#667eea' }]}>
+            <View style={[styles.menuIcon, { backgroundColor: '#03b000ff' }]}>
               <Ionicons name="person-outline" size={20} color="white" />
             </View>
             <View style={styles.menuContent}>
@@ -282,7 +282,7 @@ export default function ProfileScreen() {
             style={styles.menuItem}
             onPress={() => handleMenuPress('change-password')}
           >
-            <View style={[styles.menuIcon, { backgroundColor: '#ff9800' }]}>
+            <View style={[styles.menuIcon, { backgroundColor: '#0015ffff' }]}>
               <Ionicons name="lock-closed-outline" size={20} color="white" />
             </View>
             <View style={styles.menuContent}>
@@ -369,22 +369,24 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: '#2d2d2d',
-    lineHeight: 36,
-    includeFontPadding: true,
+    lineHeight: 38,
+    includeFontPadding: false,
   },
   headerSubtitle: {
     fontSize: 16,
     color: '#666666',
+    includeFontPadding: false,
+    lineHeight: 22,
   },
   headerTextContainer: {
     flex: 1,
   },
   headerLoginBtn: {
-    backgroundColor: '#ff9800',
+    backgroundColor: '#ff6b57',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
-    shadowColor: '#ff9800',
+    shadowColor: '#ff6b57',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -423,14 +425,14 @@ const styles = StyleSheet.create({
   avatar: {
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: 20, // Vuông bo góc
     overflow: 'hidden',
     backgroundColor: '#667eea',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarGuest: {
-    backgroundColor: '#3498db', // Màu xanh giống hình mẫu
+    backgroundColor: '#3498db',
   },
   avatarUploading: {
     opacity: 0.7,
@@ -438,7 +440,7 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 50,
+    borderRadius: 20,
   },
   avatarPlaceholder: {
     fontSize: 48,
@@ -446,12 +448,12 @@ const styles = StyleSheet.create({
   },
   editBadge: {
     position: 'absolute',
-    bottom: 5,
-    right: 5,
-    backgroundColor: '#ff9800',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    bottom: -5, // Điều chỉnh vị trí một chút cho đẹp
+    right: -5,
+    backgroundColor: '#ff6b57',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -463,6 +465,8 @@ const styles = StyleSheet.create({
     top: 5,
     right: 5,
     width: 16,
+    height: 16,
+    borderRadius: 4,
     backgroundColor: '#4caf50',
     borderWidth: 3,
     borderColor: 'white',
@@ -479,10 +483,10 @@ const styles = StyleSheet.create({
     color: '#2d3748',
     marginBottom: 4,
     textAlign: 'center',
-    flexWrap: 'wrap', // Cho phép xuống dòng
-    maxWidth: '100%', // Đảm bảo không vượt quá container
-    lineHeight: 32, // Tăng line height để hiển thị đầy đủ dấu
-    includeFontPadding: true, // Android: bao gồm font padding
+    flexWrap: 'wrap',
+    maxWidth: '100%',
+    lineHeight: 34,
+    includeFontPadding: false,
   },
   email: {
     fontSize: 16,

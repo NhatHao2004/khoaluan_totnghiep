@@ -1,77 +1,69 @@
-import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import Animated, {
-    Easing,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withTiming,
-} from 'react-native-reanimated';
+import { useEffect, useRef } from 'react';
+import { Animated, Dimensions, Image, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
+
+const { width } = Dimensions.get('window');
 
 export function LoadingScreen() {
-  const tintColor = useThemeColor({}, 'tint');
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
+  // Sử dụng Animated chuẩn của React Native
+  const scale = useRef(new Animated.Value(1)).current;
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Animation cho logo
-    scale.value = withRepeat(
-      withSequence(
-        withTiming(1.2, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      false
-    );
-
-    // Animation cho text
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.5, { duration: 800 }),
-        withTiming(1, { duration: 800 })
-      ),
-      -1,
-      false
-    );
+    // Chỉ giữ lại Animation cho thanh tiến trình (Chạy từ 0 đến 1 trong 3 giây)
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 3000,
+      useNativeDriver: false,
+    }).start();
   }, []);
 
-  const logoAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scale.value }],
-    };
-  });
-
-  const textAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: opacity.value,
-    };
-  });
+  const barWidth = width * 0.85;
 
   return (
     <ThemedView style={styles.container}>
-      <Animated.View style={[styles.logoContainer, logoAnimatedStyle]}>
-        <View style={[styles.logo, { backgroundColor: tintColor }]}>
-          <ThemedText style={styles.logoText}>KL</ThemedText>
-        </View>
-      </Animated.View>
+      <View style={styles.centerContent}>
+        <Animated.View 
+          style={[
+            styles.logoContainer, 
+            { transform: [{ scale }] }
+          ]}
+        >
+          <Image 
+            source={require('@/assets/images/logo.jpg')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Animated.View>
 
-      <Animated.View style={textAnimatedStyle}>
-        <ThemedText type="title" style={styles.title}>
+        <ThemedText style={styles.title}>
           KhmerGo
         </ThemedText>
-        <ThemedText style={styles.subtitle}>Đang chuẩn bị hành trang khám phá</ThemedText>
-      </Animated.View>
+        <ThemedText style={styles.subtitle}>
+          Chuẩn bị hành trình khám phá
+        </ThemedText>
+      </View>
 
-      <ActivityIndicator
-        size="large"
-        color={tintColor}
-        style={styles.spinner}
-      />
+      <View style={styles.bottomContent}>
+        <View style={styles.progressBarContainer}>
+          <Animated.View 
+            style={[
+              styles.progressBar, 
+              { 
+                width: progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, barWidth]
+                }) 
+              }
+            ]} 
+          />
+        </View>
+        <ThemedText style={styles.loadingText}>
+          Đang tải...
+        </ThemedText>
+      </View>
     </ThemedView>
   );
 }
@@ -79,42 +71,56 @@ export function LoadingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#ffffff',
+    justifyContent: 'space-between',
+    paddingVertical: 80,
+  },
+  centerContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   logoContainer: {
-    marginBottom: 40,
+    marginBottom: 20,
   },
   logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
-  logoText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#fff',
+    width: 250,
+    height: 180,
   },
   title: {
-    textAlign: 'center',
+    fontSize: 42,
+    fontWeight: '800',
+    color: '#000',
     marginBottom: 8,
+    includeFontPadding: false,
+    lineHeight: 52,
+    textAlign: 'center',
   },
   subtitle: {
-    textAlign: 'center',
-    opacity: 0.7,
+    fontSize: 18,
+    color: '#666',
+    fontWeight: '500',
+    includeFontPadding: false,
   },
-  spinner: {
-    marginTop: 40,
+  bottomContent: {
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  progressBarContainer: {
+    width: '85%',
+    height: 6,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 15,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#FFCC00',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#999',
+    fontWeight: '500',
   },
 });
