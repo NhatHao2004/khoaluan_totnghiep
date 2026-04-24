@@ -25,7 +25,7 @@ export function LoadingScreen() {
     <ThemedView style={styles.container}>
       <View style={styles.centerContent}>
         <View style={styles.logoContainer}>
-          <Image 
+          <Image
             source={require('@/assets/images/logo.jpg')}
             style={styles.logo}
             resizeMode="contain"
@@ -36,22 +36,22 @@ export function LoadingScreen() {
           KhmerGo
         </ThemedText>
         <ThemedText style={styles.subtitle}>
-          Chuẩn bị hành trình khám phá
+          Đang chuẩn bị hành trang khám phá
         </ThemedText>
       </View>
 
       <View style={styles.bottomContent}>
         <View style={styles.progressBarContainer}>
-          <Animated.View 
+          <Animated.View
             style={[
-              styles.progressBar, 
-              { 
+              styles.progressBar,
+              {
                 width: progress.interpolate({
                   inputRange: [0, 1],
                   outputRange: [0, barWidth]
-                }) 
+                })
               }
-            ]} 
+            ]}
           />
         </View>
         <ThemedText style={styles.loadingText}>
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: {
-    marginBottom: 20,
+    marginBottom: 5,
   },
   logo: {
     width: 250,
