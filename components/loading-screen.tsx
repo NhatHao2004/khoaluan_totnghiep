@@ -8,7 +8,6 @@ const { width } = Dimensions.get('window');
 
 export function LoadingScreen() {
   // Sử dụng Animated chuẩn của React Native
-  const scale = useRef(new Animated.Value(1)).current;
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -25,18 +24,13 @@ export function LoadingScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={styles.centerContent}>
-        <Animated.View 
-          style={[
-            styles.logoContainer, 
-            { transform: [{ scale }] }
-          ]}
-        >
+        <View style={styles.logoContainer}>
           <Image 
             source={require('@/assets/images/logo.jpg')}
             style={styles.logo}
             resizeMode="contain"
           />
-        </Animated.View>
+        </View>
 
         <ThemedText style={styles.title}>
           KhmerGo
