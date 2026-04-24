@@ -1,13 +1,13 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useQuizCategories, useQuizzes, useUserScore } from '@/hooks/use-quiz';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuizCategories, useQuizzes, useUserQuizProgress, useUserScore } from '@/hooks/use-quiz';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
+  ActivityIndicator, Alert, Dimensions,
   Image,
   RefreshControl,
   ScrollView,
@@ -30,21 +30,25 @@ export default function QuizScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchInput, setShowSearchInput] = useState(false);
 
+  const { user, loading: authLoading } = useAuth();
+  
   // Use real data from Firebase
   const { quizzes, loading: quizzesLoading, error: quizzesError, refresh: refreshQuizzes } = useQuizzes();
   const { categories, loading: categoriesLoading } = useQuizCategories();
-  const { progress, loading: progressLoading, refresh: refreshProgress } = useUserScore(TEMP_USER_ID);
+  const { progress, loading: progressLoading, refresh: refreshProgress } = useUserScore(user?.uid || '');
+  const { progressMap, loading: progressMapLoading, refresh: refreshQuizProgress } = useUserQuizProgress(user?.uid || '');
 
   // Auto refresh when screen is focused
   useFocusEffect(
     useCallback(() => {
       refreshQuizzes();
       refreshProgress();
-    }, [])
+      refreshQuizProgress();
+    }, [refreshQuizzes, refreshProgress, refreshQuizProgress])
   );
 
   const handleBackPress = () => {
-    router.push('/');
+    router.back();
   };
 
   const normalizeText = (text: string) => {
@@ -59,25 +63,43 @@ export default function QuizScreen() {
   };
 
   const handleQuizStart = (quizId: string) => {
-    // TODO: Navigate to quiz detail screen
-    console.log('Starting quiz:', quizId);
-    // For now, just show alert
-    alert(`Bắt đầu quiz: ${quizId}\n(Màn hình làm quiz đang phát triển)`);
+    if (!user) {
+      Alert.alert(
+        'Yêu cầu đăng nhập',
+        'Đăng nhập để tham gia thử thách.',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Đăng nhập', onPress: () => router.push({
+              pathname: '/login',
+              params: { from: 'quiz' }
+            })
+          }
+        ]
+      );
+      return;
+    }
+
+    router.push({
+      pathname: '/do-quiz/[id]',
+      params: { id: quizId }
+    });
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    
+
     // Hide search input and clear search query when refreshing
     if (showSearchInput) {
       setShowSearchInput(false);
       setSearchQuery('');
     }
-    
+
     try {
       await Promise.all([
         refreshQuizzes(),
-        refreshProgress()
+        refreshProgress(),
+        refreshQuizProgress()
       ]);
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -86,10 +108,23 @@ export default function QuizScreen() {
     }
   };
 
+  const getCompletionStatus = (quizId: string) => {
+    // Check if user has a score record for this quiz
+    // For now we use the progress map we just implemented
+    return progressMap[quizId] || false;
+  };
+
+  const getPerfectedStatus = (quizId: string) => {
+    return progress?.perfectedQuizIds?.includes(quizId) || false;
+  };
+
   const filteredQuizzes = quizzes
     .filter(quiz => {
-      // Filter by category only
-      return selectedCategory === 'all' || quiz.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'all' || quiz.categoryId === selectedCategory;
+      const matchesSearch = !searchQuery.trim() || 
+        normalizeText(quiz.title).includes(normalizeText(searchQuery)) ||
+        normalizeText(quiz.description || '').includes(normalizeText(searchQuery));
+      return matchesCategory && matchesSearch;
     })
     .sort((a, b) => {
       // Sort by title alphabetically (A-Z)
@@ -107,13 +142,7 @@ export default function QuizScreen() {
     }
   };
 
-  const getCompletionStatus = (quizId: string) => {
-    // This would check if user has completed this quiz
-    // For demo, randomly mark some as completed
-    return Math.random() > 0.7;
-  };
-
-  if (quizzesLoading || categoriesLoading || progressLoading) {
+  if (authLoading || (quizzesLoading && !refreshing)) {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.header}>
@@ -155,7 +184,7 @@ export default function QuizScreen() {
         <ThemedText style={styles.headerSubtitle}>Kiểm tra hiểu biết về văn hóa Khmer</ThemedText>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -185,7 +214,7 @@ export default function QuizScreen() {
           </View>
           <View style={styles.progressBarContainer}>
             <View style={[
-              styles.progressBar, 
+              styles.progressBar,
               { width: progress.totalQuizzes > 0 ? `${(progress.completedQuizzes / progress.totalQuizzes) * 100}%` : '0%' }
             ]} />
           </View>
@@ -202,8 +231,8 @@ export default function QuizScreen() {
         {/* Categories */}
         <View style={styles.categoriesSection}>
           <ThemedText style={styles.sectionTitle}>Chủ đề</ThemedText>
-          <ScrollView 
-            horizontal 
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.categoryTabs}
             contentContainerStyle={styles.categoryTabsContent}
@@ -222,7 +251,7 @@ export default function QuizScreen() {
                 Tất cả
               </ThemedText>
             </TouchableOpacity>
-            
+
             {categories.map((category) => (
               <TouchableOpacity
                 key={category.id}
@@ -236,7 +265,7 @@ export default function QuizScreen() {
                   styles.categoryTabText,
                   selectedCategory === category.id && styles.categoryTabTextActive
                 ]}>
-                  {category.icon} {category.name}
+                  {category.name}
                 </ThemedText>
               </TouchableOpacity>
             ))}
@@ -248,10 +277,10 @@ export default function QuizScreen() {
           {filteredQuizzes.length === 0 ? (
             <View style={styles.emptyContainer}>
               <ThemedText style={styles.emptyText}>
-                {searchQuery.trim() ? 
+                {searchQuery.trim() ?
                   `Không tìm thấy quiz nào với từ khóa "${searchQuery}"` :
-                  selectedCategory === 'all' 
-                    ? 'Chưa có quiz nào' 
+                  selectedCategory === 'all'
+                    ? 'Chưa có quiz nào'
                     : 'Chưa có quiz cho chủ đề này'
                 }
               </ThemedText>
@@ -259,6 +288,7 @@ export default function QuizScreen() {
           ) : (
             filteredQuizzes.map((quiz) => {
               const isCompleted = getCompletionStatus(quiz.id!);
+              const isPerfected = getPerfectedStatus(quiz.id!);
               
               return (
                 <TouchableOpacity
@@ -268,9 +298,9 @@ export default function QuizScreen() {
                   activeOpacity={0.8}
                 >
                   <View style={styles.quizCardHeader}>
-                    <Image 
-                      source={quiz.imageUrl ? { uri: quiz.imageUrl } : require('@/assets/images/chua1.jpg')} 
-                      style={styles.quizCardImage} 
+                    <Image
+                      source={quiz.imageUrl ? { uri: quiz.imageUrl } : require('@/assets/images/chua1.jpg')}
+                      style={styles.quizCardImage}
                     />
                     <View style={styles.quizCardBadge}>
                       <ThemedText style={styles.quizCardBadgeText}>
@@ -286,13 +316,13 @@ export default function QuizScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  
+
                   <View style={styles.quizCardContent}>
                     <ThemedText style={styles.quizCardTitle}>{quiz.title}</ThemedText>
                     <ThemedText style={styles.quizCardDescription}>
                       {quiz.description}
                     </ThemedText>
-                    
+
                     <View style={styles.quizCardFooter}>
                       <View style={styles.quizCardInfo}>
                         <View style={styles.quizInfoItem}>
@@ -304,16 +334,17 @@ export default function QuizScreen() {
                           <ThemedText style={styles.quizInfoText}>{quiz.maxPoints} điểm</ThemedText>
                         </View>
                       </View>
-                      
+
                       <TouchableOpacity
                         style={[
                           styles.quizCardButton,
-                          isCompleted && styles.quizCardButtonCompleted
+                          isCompleted && styles.quizCardButtonCompleted,
+                          isPerfected && styles.quizCardButtonPerfected
                         ]}
                         onPress={() => handleQuizStart(quiz.id!)}
                       >
                         <ThemedText style={styles.quizCardButtonText}>
-                          {isCompleted ? 'Làm lại' : 'Bắt đầu'}
+                          {isPerfected ? 'Hoàn thành' : (isCompleted ? 'Làm lại' : 'Bắt đầu')}
                         </ThemedText>
                       </TouchableOpacity>
                     </View>
@@ -516,13 +547,16 @@ const styles = StyleSheet.create({
     color: '#757575',
   },
   quizCardButton: {
-    backgroundColor: '#ff6b57',
+    backgroundColor: '#2282ff', // Màu xanh nước biển
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
   },
   quizCardButtonCompleted: {
-    backgroundColor: '#4caf50',
+    backgroundColor: '#1a73e8', // Xanh nước biển đậm hơn cho 'Làm lại'
+  },
+  quizCardButtonPerfected: {
+    backgroundColor: '#f44336', // Màu đỏ cho 'Hoàn thành'
   },
   quizCardButtonText: {
     fontSize: 13,

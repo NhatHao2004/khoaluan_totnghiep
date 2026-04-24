@@ -118,6 +118,7 @@ export default function FavoritesScreen() {
         isFavorite: item.isFavorite?.toString(),
         latitude: item.latitude?.toString(),
         longitude: item.longitude?.toString(),
+        source: 'favorites',
       }
     });
   };

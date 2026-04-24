@@ -161,6 +161,13 @@ export default function RootLayout() {
             href: null, // Hide from tab bar
           }}
         />
+        <Tabs.Screen
+          name="do-quiz/[id]"
+          options={{
+            href: null, // Hide from tab bar
+            tabBarStyle: { display: 'none' } // Hide tab bar on quiz screen
+          }}
+        />
       </Tabs>
       <StatusBar style="auto" />
     </ThemeProvider>

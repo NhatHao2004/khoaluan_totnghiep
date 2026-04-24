@@ -59,10 +59,15 @@ export default function RegisterScreen() {
       if (params.from === 'pagoda-detail' && params.templeId) {
         router.replace({
           pathname: '/pagoda-detail',
-          params: { id: params.templeId }
+          params: { 
+            id: params.templeId,
+            source: params.source
+          }
         });
       } else if (params.from === 'profile') {
         router.replace('/profile');
+      } else if (params.from === 'quiz') {
+        router.replace('/quiz');
       } else if (params.from) {
         router.back();
       } else {
@@ -188,7 +193,7 @@ export default function RegisterScreen() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <ThemedText style={styles.registerBtnText} numberOfLines={1}>Đăng ký ngay</ThemedText>
+                <ThemedText style={styles.registerBtnText}>Đăng ký ngay</ThemedText>
               )}
             </TouchableOpacity>
 
@@ -199,7 +204,7 @@ export default function RegisterScreen() {
                 pathname: '/login',
                 params: { ...params }
               })}>
-                <ThemedText style={styles.loginLink} numberOfLines={1}>Đăng nhập</ThemedText>
+                <ThemedText style={styles.loginLink}>Đăng nhập</ThemedText>
               </TouchableOpacity>
             </View>
           </View>

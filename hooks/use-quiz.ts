@@ -1,16 +1,51 @@
 import {
     getLeaderboard,
     getQuizCategories,
+    getQuizQuestions,
     getQuizzes,
     getQuizzesByCategory,
+    getUserAttempts,
     getUserProgress,
     getUserScore,
     Quiz,
+    QuizAttempt,
     QuizCategory,
+    QuizQuestion,
     submitQuizResult,
-    UserScore
+    UserScore,
+    getAllUserProgress
 } from '@/services/quiz-service';
 import { useCallback, useEffect, useState } from 'react';
+
+// Hook to get user quiz progress
+export function useUserQuizProgress(userId: string) {
+  const [progressMap, setProgressMap] = useState<{ [quizId: string]: boolean }>({});
+  const [loading, setLoading] = useState(true);
+
+  const fetchProgress = useCallback(async () => {
+    if (!userId) {
+      setProgressMap({});
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const data = await getAllUserProgress(userId);
+      setProgressMap(data);
+    } catch (error) {
+      console.error('Error in useUserQuizProgress:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchProgress();
+  }, [fetchProgress]);
+
+  return { progressMap, loading, refresh: fetchProgress };
+}
 
 // Hook to get all quizzes
 export function useQuizzes() {
@@ -18,11 +53,7 @@ export function useQuizzes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    loadQuizzes();
-  }, []);
-
-  const loadQuizzes = async () => {
+  const loadQuizzes = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getQuizzes();
@@ -31,18 +62,54 @@ export function useQuizzes() {
     } catch (err) {
       console.error('Error in useQuizzes:', err);
       setError(err as Error);
-      // Set empty array as fallback
       setQuizzes([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const refresh = () => {
+  useEffect(() => {
     loadQuizzes();
-  };
+  }, [loadQuizzes]);
+
+  const refresh = useCallback(() => {
+    loadQuizzes();
+  }, [loadQuizzes]);
 
   return { quizzes, loading, error, refresh };
+}
+
+// Hook to get quiz questions from sub-collection
+export function useQuizQuestions(quizId: string) {
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const loadQuestions = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getQuizQuestions(quizId);
+      setQuestions(data);
+      setError(null);
+    } catch (err) {
+      console.error(`Error in useQuizQuestions for ${quizId}:`, err);
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  }, [quizId]);
+
+  useEffect(() => {
+    if (quizId) {
+      loadQuestions();
+    }
+  }, [quizId, loadQuestions]);
+
+  const refresh = useCallback(() => {
+    loadQuestions();
+  }, [loadQuestions]);
+
+  return { questions, loading, error, refresh };
 }
 
 // Hook to get quizzes by category
@@ -83,11 +150,7 @@ export function useQuizCategories() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getQuizCategories();
@@ -96,16 +159,19 @@ export function useQuizCategories() {
     } catch (err) {
       console.error('Error in useQuizCategories:', err);
       setError(err as Error);
-      // Set empty array as fallback
       setCategories([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const refresh = () => {
+  useEffect(() => {
     loadCategories();
-  };
+  }, [loadCategories]);
+
+  const refresh = useCallback(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   return { categories, loading, error, refresh };
 }
@@ -118,7 +184,8 @@ export function useUserScore(userId?: string) {
     totalQuizzes: 0,
     totalScore: 0,
     averageScore: 0,
-    rank: 0
+    rank: 0,
+    perfectedQuizIds: [] as string[]
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -133,7 +200,8 @@ export function useUserScore(userId?: string) {
         totalQuizzes: 0,
         totalScore: 0,
         averageScore: 0,
-        rank: 0
+        rank: 0,
+        perfectedQuizIds: []
       });
       setLoading(false);
     }
@@ -159,10 +227,11 @@ export function useUserScore(userId?: string) {
       setUserScore(null);
       setProgress({
         completedQuizzes: 0,
-        totalQuizzes: 3,
+        totalQuizzes: 0,
         totalScore: 0,
         averageScore: 0,
-        rank: 0
+        rank: 0,
+        perfectedQuizIds: []
       });
     } finally {
       setLoading(false);
@@ -192,6 +261,40 @@ export function useUserScore(userId?: string) {
   }, [loadUserData]);
 
   return { userScore, progress, loading, error, submitResult, refresh };
+}
+
+// Hook to get user quiz attempts history
+export function useUserAttempts(userId?: string) {
+  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const loadAttempts = useCallback(async () => {
+    if (!userId) return;
+    try {
+      setLoading(true);
+      const data = await getUserAttempts(userId);
+      setAttempts(data);
+      setError(null);
+    } catch (err) {
+      console.error(`Error in useUserAttempts for ${userId}:`, err);
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) {
+      loadAttempts();
+    }
+  }, [userId, loadAttempts]);
+
+  const refresh = useCallback(() => {
+    loadAttempts();
+  }, [loadAttempts]);
+
+  return { attempts, loading, error, refresh };
 }
 
 // Hook to get leaderboard

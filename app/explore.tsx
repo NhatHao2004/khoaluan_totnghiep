@@ -170,7 +170,13 @@ export default function ExploreScreen() {
         if (nearbyTemples.length > 0) {
           results = [...nearbyTemples].sort(() => 0.5 - Math.random()).slice(0, 5);
         } else if (temples && temples.length > 0) {
-          results = [...temples].sort(() => 0.5 - Math.random()).slice(0, 5);
+          // Filter to only include temples with coordinates as a fallback
+          const templesWithCoords = temples.filter(t => t.latitude && t.longitude);
+          if (templesWithCoords.length > 0) {
+            results = [...templesWithCoords].sort(() => 0.5 - Math.random()).slice(0, 5);
+          } else {
+            results = [...temples].sort(() => 0.5 - Math.random()).slice(0, 5);
+          }
         }
       } else {
         const categoryMap: Record<string, string> = {
@@ -305,7 +311,7 @@ export default function ExploreScreen() {
                 <ThemedText style={[
                   styles.orbTitle,
                   scanCategory === cat.id && { color: '#ff6b57', fontWeight: '800' }
-                ]} numberOfLines={1}>{cat.title}</ThemedText>
+                ]}>{cat.title}</ThemedText>
               </TouchableOpacity>
             ))}
           </View>
@@ -411,14 +417,17 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     color: '#ff6b57',
-    lineHeight: 36,
+    lineHeight: 32,
   },
   radarText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#999',
-    letterSpacing: 2,
-    marginTop: -4,
+    letterSpacing: 0,
+    marginTop: 0,
+    textAlign: 'center',
+    includeFontPadding: false,
+    lineHeight: 18,
   },
   collectionsSection: {
     paddingHorizontal: 20,

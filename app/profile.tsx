@@ -185,7 +185,7 @@ export default function ProfileScreen() {
               params: { from: 'profile' }
             })}
           >
-            <ThemedText style={styles.headerLoginBtnText} numberOfLines={1}>Đăng nhập</ThemedText>
+            <ThemedText style={styles.headerLoginBtnText}>Đăng nhập</ThemedText>
           </TouchableOpacity>
         )}
       </View>
@@ -236,7 +236,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.profileInfo}>
-            <ThemedText style={styles.name} numberOfLines={1}>
+            <ThemedText style={styles.name}>
               {user ? (userData?.fullName || user.displayName || 'Người dùng') : 'Khách'}
             </ThemedText>
             <ThemedText style={styles.email}>

@@ -36,13 +36,27 @@ export default function LoginScreen() {
       setLoading(true);
       await login(email, password);
       // Success: Precise redirection based on where we came from
-      if (params.from === 'pagoda-detail' && params.templeId) {
+      if (params.from === 'do-quiz' && params.quizId) {
+        router.replace({
+          pathname: '/do-quiz/[id]',
+          params: { 
+            id: params.quizId as string,
+            source: 'pagoda-detail',
+            templeId: params.templeId as string
+          }
+        });
+      } else if (params.from === 'pagoda-detail' && params.templeId) {
         router.replace({
           pathname: '/pagoda-detail',
-          params: { id: params.templeId }
+          params: { 
+            id: params.templeId,
+            source: params.source
+          }
         });
       } else if (params.from === 'profile') {
         router.replace('/profile');
+      } else if (params.from === 'quiz') {
+        router.replace('/quiz');
       } else if (params.from) {
         router.back();
       } else {
@@ -79,7 +93,10 @@ export default function LoginScreen() {
                 if (params.from === 'pagoda-detail' && params.templeId) {
                   router.replace({
                     pathname: '/pagoda-detail',
-                    params: { id: params.templeId }
+                    params: { 
+                      id: params.templeId,
+                      source: params.source
+                    }
                   });
                 } else if (params.from === 'profile') {
                   router.replace('/profile');
@@ -148,7 +165,7 @@ export default function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <ThemedText style={styles.loginBtnText} numberOfLines={1}>Đăng nhập</ThemedText>
+                <ThemedText style={styles.loginBtnText}>Đăng nhập</ThemedText>
               )}
             </TouchableOpacity>
 

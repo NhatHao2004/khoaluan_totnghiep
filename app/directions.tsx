@@ -7,6 +7,7 @@ import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   ScrollView,
@@ -220,13 +221,20 @@ export default function DirectionsScreen() {
     description: params.description as string,
     imageUrl: params.imageUrl as string,
     category: params.category as string,
-    latitude: params.latitude ? parseFloat(params.latitude as string) : undefined,
-    longitude: params.longitude ? parseFloat(params.longitude as string) : undefined,
+    latitude: (params.latitude && params.latitude !== 'undefined') ? parseFloat(params.latitude as string) : undefined,
+    longitude: (params.longitude && params.longitude !== 'undefined') ? parseFloat(params.longitude as string) : undefined,
   };
 
-  // Reset trạng thái dẫn đường khi chuyển sang xem chùa mới
+  // Reset trạng thái và đường đi khi chuyển sang xem chùa mới
   useEffect(() => {
     setIsNavigating(false);
+    setRouteCoordinates([]);
+    setDistance(null);
+    setTravelTime('');
+    setNavigationSteps([]);
+    setCurrentStep(null);
+    lastFetchCoords.current = null;
+
     if (locationSubscription.current) {
       locationSubscription.current.remove();
       locationSubscription.current = null;
@@ -242,7 +250,6 @@ export default function DirectionsScreen() {
       fetchRoute();
     }
   }, [location, temple.latitude, temple.longitude, selectedMode]);
-
   // Cleanup location tracking on unmount
   useEffect(() => {
     return () => {
@@ -252,35 +259,44 @@ export default function DirectionsScreen() {
     };
   }, []);
 
-
+  const lastFetchCoords = useRef<{ lat: number, lon: number } | null>(null);
 
   const fetchRoute = async () => {
     if (!location || !temple.latitude || !temple.longitude) return;
 
-    setIsLoadingRoute(true);
+    // Only fetch if location has changed significantly (> 0.0001 degrees ~ 10m)
+    if (lastFetchCoords.current) {
+      const latDiff = Math.abs(location.coords.latitude - lastFetchCoords.current.lat);
+      const lonDiff = Math.abs(location.coords.longitude - lastFetchCoords.current.lon);
+      if (latDiff < 0.0001 && lonDiff < 0.0001 && routeCoordinates.length > 0) {
+        return;
+      }
+    }
 
-    console.log('� Strart location:', location.coords.latitude, location.coords.longitude);
-    console.log('🏯 Temple location:', temple.latitude, temple.longitude);
-    console.log('📏 Straight line distance:', calculateDistance(
-      location.coords.latitude,
-      location.coords.longitude,
-      temple.latitude,
-      temple.longitude
-    ).toFixed(2), 'km');
+    setIsLoadingRoute(true);
+    lastFetchCoords.current = {
+      lat: location.coords.latitude,
+      lon: location.coords.longitude
+    };
 
     try {
-      // OSRM API - Free, no API key needed!
-      // Convert travel mode
+      // OSRM API 
       let profile = 'car';
       if (selectedMode === 'walking') profile = 'foot';
-      else if (selectedMode === 'motorbike') profile = 'car'; // Use car for motorbike
+      else if (selectedMode === 'motorbike') profile = 'car';
 
-      // Add alternatives=true to get multiple routes and pick shortest
-      const url = `https://router.project-osrm.org/route/v1/${profile}/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=full&geometries=geojson&alternatives=true&steps=true`;
+      // Set alternatives=false to speed up the request
+      const url = `https://router.project-osrm.org/route/v1/${profile}/${location.coords.longitude},${location.coords.latitude};${temple.longitude},${temple.latitude}?overview=full&geometries=geojson&alternatives=false&steps=true`;
 
       console.log('🗺️ Fetching route from OSRM...');
 
-      const response = await fetch(url);
+      // Add timeout to fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
       const data = await response.json();
 
       console.log('📡 API Response status:', data.code);
@@ -294,16 +310,27 @@ export default function DirectionsScreen() {
         console.log('📊 Found', data.routes.length, 'alternative routes, using shortest');
         console.log('🛣️ Route distance from API:', (route.distance / 1000).toFixed(2), 'km');
 
-        // Convert GeoJSON coordinates to React Native Maps format
-        const coordinates = route.geometry.coordinates.map((coord: number[]) => ({
-          latitude: coord[1],
-          longitude: coord[0],
-        }));
+        // Convert GeoJSON coordinates [longitude, latitude] to React Native Maps format {latitude, longitude}
+        const parsedCoordinates = route.geometry.coordinates.map((coord: number[]) => {
+          if (!Array.isArray(coord) || coord.length < 2) return null;
+          return {
+            latitude: coord[1],
+            longitude: coord[0],
+          };
+        }).filter((c: any) => c !== null);
 
-        console.log('🗺️ First 3 route points:', coordinates.slice(0, 3));
-        console.log('🗺️ Last 3 route points:', coordinates.slice(-3));
+        // Đảm bảo đường đi luôn bắt đầu từ vị trí người dùng và kết thúc CHÍNH XÁC tại Marker chùa
+        // Điều này giúp khắc phục lỗi "snapping" của OSRM dẫn đến lệch điểm cuối
+        const finalCoordinates = [
+          { latitude: location.coords.latitude, longitude: location.coords.longitude },
+          ...parsedCoordinates,
+          { latitude: temple.latitude, longitude: temple.longitude }
+        ];
 
-        setRouteCoordinates(coordinates);
+        console.log('🗺️ First 3 route points:', finalCoordinates.slice(0, 3));
+        console.log('🗺️ Last 3 route points:', finalCoordinates.slice(-3));
+
+        setRouteCoordinates(finalCoordinates as { latitude: number, longitude: number }[]);
 
         // Extract navigation steps
         if (route.legs && route.legs[0] && route.legs[0].steps) {
@@ -591,6 +618,28 @@ export default function DirectionsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Error Overlay for Missing Coordinates */}
+      {(!temple.latitude || isNaN(temple.latitude) || !temple.longitude || isNaN(temple.longitude)) && (
+        <View style={styles.errorOverlay}>
+          <Ionicons name="location-outline" size={60} color="#ff6b57" />
+          <ThemedText style={styles.errorTitle}>Thiếu tọa độ địa điểm</ThemedText>
+          <ThemedText style={styles.errorSubtitle}>
+            Rất tiếc, chúng tôi không có dữ liệu định vị cho {temple.name || 'địa điểm này'}.
+          </ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={handleBackPress}>
+            <ThemedText style={styles.retryButtonText}>Quay lại</ThemedText>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Loading Overlay */}
+      {isLoadingRoute && routeCoordinates.length === 0 && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#4285f4" />
+          <ThemedText style={styles.loadingText}>Đang tìm tuyến đường đi...</ThemedText>
+        </View>
+      )}
+
       {/* Map View - Full Screen */}
       {temple.latitude && temple.longitude && (
         <View style={styles.fullMapContainer}>
@@ -632,22 +681,6 @@ export default function DirectionsScreen() {
               </Marker>
             )}
 
-            {/* Static user location marker (when not navigating) */}
-            {!isNavigating && location && (
-              <Marker
-                key="user-static"
-                coordinate={{
-                  latitude: location.coords.latitude,
-                  longitude: location.coords.longitude,
-                }}
-                title="Vị trí của bạn"
-              >
-                <View style={styles.staticUserMarker}>
-                  <Ionicons name="person" size={16} color="#ffffff" />
-                </View>
-              </Marker>
-            )}
-
             {/* Temple marker */}
             <Marker
               key="temple"
@@ -663,13 +696,16 @@ export default function DirectionsScreen() {
               </View>
             </Marker>
 
-            {/* Route line */}
+            {/* Route line - Solid Blue Line */}
             {routeCoordinates.length > 0 && (
               <Polyline
+                key={`route-line-${routeCoordinates.length}-${selectedMode}`}
                 coordinates={routeCoordinates}
                 strokeColor="#4285f4"
-                strokeWidth={6}
-                lineDashPattern={[0]}
+                strokeWidth={7}
+                lineCap="round"
+                lineJoin="round"
+                zIndex={1}
               />
             )}
           </MapView>
@@ -1180,5 +1216,57 @@ const styles = StyleSheet.create({
   templeMarker: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    zIndex: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#4285f4',
+    fontWeight: '600',
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#ffffff',
+    zIndex: 2000,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    marginTop: 20,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 15,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: '#ff6b57',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#ff6b57',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

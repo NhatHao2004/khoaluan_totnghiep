@@ -1,8 +1,9 @@
 import PagodaContentSection from '@/components/pagoda-content-section';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTemples } from '@/hooks/use-temples';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getTemples, Temple, toggleFavorite } from '@/services/firebase-service';
+import { Temple, toggleFavorite } from '@/services/firebase-service';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -55,7 +56,12 @@ export default function PagodaDetailScreen() {
   const params = useLocalSearchParams();
   const tintColor = useThemeColor({}, 'tint');
 
-  const extractTempleFromParams = () => {
+  const { temples, loading: templesLoading } = useTemples();
+
+  const extractTempleFromParams = (dbTemples: any[] = []) => {
+    const templeId = (params.id || params.templeId) as string;
+    const dbTemple = dbTemples.find(t => t.id === templeId);
+
     let parsedAdditionalImages = undefined;
     let parsedDetailedDescription = undefined;
 
@@ -71,61 +77,48 @@ export default function PagodaDetailScreen() {
     }
 
     return {
-      id: params.id as string,
-      name: params.name as string,
-      location: params.location as string,
-      rental: params.rental as string,
-      description: params.description as string,
-      imageUrl: params.imageUrl as string,
-      category: params.category as string,
-      isFavorite: params.isFavorite === 'true',
-      latitude: params.latitude ? parseFloat(params.latitude as string) : undefined,
-      longitude: params.longitude ? parseFloat(params.longitude as string) : undefined,
-      additionalImages: parsedAdditionalImages,
-      detailedDescription: parsedDetailedDescription,
+      id: templeId,
+      name: (params.name as string) || dbTemple?.name || '',
+      location: (params.location as string) || dbTemple?.location || dbTemple?.rental || '',
+      rental: (params.rental as string) || dbTemple?.rental || '',
+      description: (params.description as string) || dbTemple?.description || '',
+      imageUrl: (params.imageUrl as string) || dbTemple?.imageUrl || '',
+      category: (params.category as string) || dbTemple?.category || '',
+      isFavorite: params.isFavorite === 'true' || dbTemple?.isFavorite,
+      latitude: (params.latitude && params.latitude !== 'undefined')
+        ? parseFloat(params.latitude as string)
+        : dbTemple?.latitude,
+      longitude: (params.longitude && params.longitude !== 'undefined')
+        ? parseFloat(params.longitude as string)
+        : dbTemple?.longitude,
+      additionalImages: parsedAdditionalImages || dbTemple?.additionalImages,
+      detailedDescription: parsedDetailedDescription || dbTemple?.detailedDescription,
     };
   };
 
-  const [temple, setTemple] = useState<Temple>(extractTempleFromParams);
+  const [temple, setTemple] = useState<Temple>(() => extractTempleFromParams(temples));
   const [isFavorite, setIsFavorite] = useState(temple.isFavorite || false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Ép cập nhật lại toàn bộ state khi người dùng bấm sang một ngổi chùa khác
-  useEffect(() => {
-    const freshTemple = extractTempleFromParams();
-    setTemple(freshTemple);
-    setIsFavorite(freshTemple.isFavorite || false);
-
-    // Reset thanh cuộn lên đầu cùng màn hình
-    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-  }, [params.id]);
-
-  // Thiết lập delay nhẹ và chỉ cập nhật state cụ thể (tránh load đè toàn bộ object gây giật ảnh)
+  // Sync state when Firestore data arrives or navigation parameters change
+  // Tự động cuộn lên đầu trang tức thì mỗi khi màn hình được tập trung
   useFocusEffect(
     useCallback(() => {
-      let isActive = true;
-      const loadTempleData = async () => {
-        try {
-          // Delay load API để màn hình chuyển trang mượt mà ngay lập tức
-          await new Promise(resolve => setTimeout(resolve, 300));
-          if (!isActive) return;
-
-          const temples = await getTemples();
-          const updatedTemple = temples.find((t: Temple) => t.id === params.id);
-          if (updatedTemple && isActive) {
-            // Chỉ cập nhật trạng thái Favorite, không ghi đè lại toàn bộ state `temple`
-            // để tránh bức ảnh chính bị render lại dẫn tới chớp giật 
-            setIsFavorite(updatedTemple.isFavorite || false);
-          }
-        } catch (error) {
-          console.error('Error loading temple data:', error);
-        }
-      };
-
-      loadTempleData();
-      return () => { isActive = false; };
-    }, [params.id])
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
   );
+
+  // This is crucial for maintaining coordinates after login redirection
+  useEffect(() => {
+    const freshTemple = extractTempleFromParams(temples);
+
+    // Only update state if necessary to prevent unnecessary flickers
+    if (freshTemple.name !== temple.name || freshTemple.id !== temple.id) {
+      setTemple(freshTemple);
+    }
+
+    setIsFavorite(freshTemple.isFavorite || false);
+  }, [params.id, params.templeId, templesLoading]);
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -134,15 +127,16 @@ export default function PagodaDetailScreen() {
         'Đăng nhập để lưu địa điểm yêu thích.',
         [
           { text: 'Để sau', style: 'cancel' },
-          { 
-            text: 'Đăng nhập', 
+          {
+            text: 'Đăng nhập',
             onPress: () => router.push({
               pathname: '/login',
-              params: { 
+              params: {
                 from: 'pagoda-detail',
-                templeId: temple.id 
+                templeId: temple.id,
+                source: params.source
               }
-            }) 
+            })
           }
         ]
       );
@@ -167,13 +161,8 @@ export default function PagodaDetailScreen() {
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => {
-            if (params.source === 'explore') {
-              router.push('/explore');
-            } else if (params.source === 'pagoda') {
-              router.push('/pagoda');
-            } else {
-              router.back();
-            }
+            // Sử dụng navigate để quay về trang danh sách và dọn dẹp các trang đã mở ở giữa (như Quiz)
+            router.navigate('/pagoda');
           }}
         >
           <Ionicons name="arrow-back" size={24} color="#000000" />
@@ -231,36 +220,89 @@ export default function PagodaDetailScreen() {
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
           <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnPrimary]}
-              onPress={() => {
-                router.push({
-                  pathname: '/directions',
-                  params: {
-                    id: temple.id,
-                    name: temple.name,
-                    location: temple.location,
-                    rental: temple.rental,
-                    description: temple.description,
-                    imageUrl: temple.imageUrl,
-                    category: temple.category,
-                    latitude: temple.latitude?.toString(),
-                    longitude: temple.longitude?.toString(),
-                    source: params.source || 'pagoda-detail',
-                    isFavorite: temple.isFavorite?.toString(),
-                  }
-                });
-              }}
-            >
-              <Ionicons name="navigate" size={16} color="#ffffff" />
-              <ThemedText style={styles.actionBtnText}>Chỉ đường</ThemedText>
-            </TouchableOpacity>
+            {(temple.latitude && !isNaN(temple.latitude) && temple.longitude && !isNaN(temple.longitude)) && (
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnPrimary]}
+                onPress={() => {
+                  router.push({
+                    pathname: '/directions',
+                    params: {
+                      id: temple.id,
+                      name: temple.name,
+                      location: temple.location,
+                      rental: temple.rental,
+                      description: temple.description,
+                      imageUrl: temple.imageUrl,
+                      category: temple.category,
+                      latitude: temple.latitude?.toString(),
+                      longitude: temple.longitude?.toString(),
+                      source: params.source || 'pagoda-detail',
+                      isFavorite: temple.isFavorite?.toString(),
+                    }
+                  });
+                }}
+              >
+                <Ionicons name="navigate" size={16} color="#ffffff" />
+                <ThemedText style={styles.actionBtnText}>Chỉ đường</ThemedText>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnSecondary]}
               onPress={() => {
-                // Logic for Quiz/Challenge
-                router.push('/quiz');
+                // Chuẩn hóa tên để so sánh (xóa mọi khoảng trắng, không dấu, viết thường)
+                const cleanName = temple?.name?.toLowerCase()
+                  .normalize("NFD")
+                  .replace(/[\u0300-\u036f]/g, "")
+                  .replace(/đ/g, "d")
+                  .replace(/\s+/g, ""); // Xóa hết khoảng trắng
+                
+                const isChuaAng = cleanName?.includes('ang');
+
+                // Kiểm tra đăng nhập trước khi cho phép làm thử thách
+                if (!user) {
+                  Alert.alert(
+                    'Yêu cầu đăng nhập',
+                    'Đăng nhập để tham gia thử thách.',
+                    [
+                      { text: 'Để sau', style: 'cancel' },
+                      { 
+                        text: 'Đăng nhập', 
+                        onPress: () => router.push({
+                          pathname: '/login',
+                          params: { 
+                            from: isChuaAng ? 'do-quiz' : 'quiz',
+                            quizId: isChuaAng ? 'PFB2JEcYku3tLlYwJPMK' : undefined,
+                            templeId: temple.id,
+                            source: 'pagoda-detail' 
+                          }
+                        }) 
+                      }
+                    ]
+                  );
+                  return;
+                }
+
+                // Nếu là Chùa Âng, dẫn thẳng tới bộ Quiz PFB2JEcYku3tLlYwJPMK
+                if (isChuaAng) {
+                  router.push({
+                    pathname: '/do-quiz/[id]',
+                    params: { 
+                      id: 'PFB2JEcYku3tLlYwJPMK',
+                      source: 'pagoda-detail',
+                      templeId: temple.id
+                    }
+                  });
+                } else {
+                  // Các chùa khác vẫn về trang danh sách Quiz chung
+                  router.push({
+                    pathname: '/quiz',
+                    params: {
+                      source: 'pagoda-detail',
+                      templeId: temple.id
+                    }
+                  });
+                }
               }}
             >
               <Ionicons name="help-circle" size={16} color="#ffffff" />
